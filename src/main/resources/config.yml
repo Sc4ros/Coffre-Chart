@@ -1,0 +1,65 @@
+# ───────────────────────────────────────────────
+#  Coffres : configuration
+#  Tout ce qu'il y a dans tes coffres, partout.
+# ───────────────────────────────────────────────
+
+web:
+  enabled: true
+  # Port du site. Il doit être ouvert/redirigé chez ton hébergeur ou sur ta box
+  # (c'est un port en plus de celui de Minecraft).
+  port: 8125
+  # 0.0.0.0 = accessible depuis l'extérieur. Mets 127.0.0.1 si tu passes par un proxy (Caddy, Nginx, Cloudflare Tunnel).
+  bind: "0.0.0.0"
+  # Adresse du site telle que les joueurs la tapent, utilisée dans les liens envoyés en jeu.
+  # Exemple : "http://play.monserveur.fr:8125" ou "https://coffres.monserveur.fr"
+  # Laisse vide pour deviner à partir de l'IP du serveur.
+  public-url: ""
+  # Nom affiché en haut du site.
+  server-name: "Mon serveur"
+
+tracking:
+  # Blocs suivis. * = n'importe quoi avant. Le coffre de l'Ender n'est jamais suivi (il est perso).
+  containers:
+    - "*CHEST"
+    - "BARREL"
+    - "*SHULKER_BOX"
+  # Compter aussi ce qu'il y a DANS les boîtes de Shulker et les sacs rangés dans les coffres.
+  count-shulker-contents: true
+  # Un coffre ajouté est-il visible par tout le monde sur le site ? (chacun peut passer le sien en privé)
+  public-by-default: true
+  # Nombre de coffres revérifiés par tick (détecte entonnoirs, golems de cuivre, etc.).
+  chests-per-tick: 10
+  # Le mode ajout se coupe tout seul après ce délai (secondes).
+  link-mode-timeout-seconds: 180
+  # Les mouvements automatiques (entonnoirs…) sont regroupés sur cette durée dans l'historique (secondes).
+  auto-group-seconds: 60
+
+history:
+  # Combien de jours d'historique garder.
+  retention-days: 60
+  # Limite de lignes d'historique en mémoire.
+  max-entries: 300000
+
+auth:
+  # Durée d'une connexion au site avant de devoir redemander un code (jours).
+  session-days: 180
+
+locate:
+  # Durée de la surbrillance quand on clique « Localiser en jeu » (secondes).
+  duration-seconds: 60
+
+projects:
+  # Projets de construction : on envoie un fichier .litematic, .schem, .schematic ou .nbt sur le site,
+  # Coffres compte les blocs nécessaires et ce qu'il y a déjà dans les coffres liés au projet.
+  # Taille maximale d'un fichier envoyé (Mo).
+  max-file-mb: 20
+  # Nombre de projets maximum par joueur (les admins n'ont pas de limite).
+  max-per-player: 15
+
+assets:
+  # Télécharge les textures et les noms d'objets officiels depuis les serveurs de Mojang
+  # (comme le font BlueMap et d'autres plugins) pour afficher les vraies icônes sur le site.
+  # Rien n'est envoyé à Mojang. Mets false pour des icônes simplifiées.
+  download-from-mojang: true
+  # Langue des noms d'objets sur le site (fr_fr, en_us, de_de, es_es…).
+  language: "fr_fr"

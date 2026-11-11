@@ -1,0 +1,21 @@
+name: Coffres
+version: '${version}'
+main: fr.coffres.CoffresPlugin
+api-version: '26.1'
+description: Tout ce qu'il y a dans tes coffres, partout. Inventaire des coffres + site web (PC et téléphone).
+authors: [Coffres]
+
+commands:
+  coffres:
+    description: Ouvre le menu Coffres (ajouter des coffres, accès au site, recherche).
+    usage: /coffres [ajouter|web|chercher|projet|nom|zone|prive|public|info|retirer|deconnexion|reload]
+    aliases: [coffre, stock]
+    permission: coffres.use
+
+permissions:
+  coffres.use:
+    description: Utiliser Coffres (ajouter ses coffres, se connecter au site).
+    default: true
+  coffres.admin:
+    description: Gérer tous les coffres (y compris privés), recharger la config.
+    default: op
