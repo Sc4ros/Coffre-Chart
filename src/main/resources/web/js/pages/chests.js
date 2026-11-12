@@ -111,7 +111,7 @@ function slotGrid(c) {
   const cells = [];
   for (let i = 0; i < c.size; i++) {
     const sl = bySlot.get(i);
-    if (!sl) { cells.push(h('div.slot.empty', { 'aria-hidden': 'true' })); continue; }
+    if (!sl) { cells.push(h('div.slot.blank', { 'aria-hidden': 'true' })); continue; }
     const label = `${sl.name ? '« ' + sl.name + ' » ' : ''}${itemName(sl.id)} ×${sl.n}`;
     const btn = h('button', { class: ['slot', sl.e ? 'glint' : '', sl.in ? 'has-in' : ''], type: 'button', 'aria-label': label },
       itemIcon(sl.id), sl.n > 1 ? h('span.cnt', String(sl.n)) : null);

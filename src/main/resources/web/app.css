@@ -127,6 +127,17 @@ h1, h2, h3, p { margin: 0; }
 .tab svg { width: 25px; height: 25px; }
 .tab.on { color: var(--accent); }
 
+/* Installed on an iPhone, the status bar is drawn over the page: this strip keeps the page from scrolling under the
+   clock. Its height is 0 in a normal browser tab. */
+body::before {
+  content: ""; position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--bar);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  pointer-events: none;
+}
+
 @media (min-width: 900px) {
   .tabbar { display: none; }
   .shell { display: grid; grid-template-columns: 248px 1fr; }
@@ -325,8 +336,9 @@ a.row:hover, button.row:hover { background: var(--fill); }
 .slot.has-in::after { content: ""; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .slot.glint .ic { filter: drop-shadow(0 0 3px rgba(190, 120, 255, .9)); animation: glint 2.4s linear infinite; }
 @keyframes glint { 50% { filter: drop-shadow(0 0 1px rgba(190, 120, 255, .5)) brightness(1.18); } }
-.slot.empty { cursor: default; }
-.slot:not(.empty):hover { outline: 2px solid var(--accent); }
+/* "blank", not "empty": .empty is the "nothing here" message below and its padding stretched the free slots */
+.slot.blank { cursor: default; }
+.slot:not(.blank):hover { outline: 2px solid var(--accent); }
 
 /* activity feed */
 .feed { display: flex; flex-direction: column; }
