@@ -1,5 +1,18 @@
 # Changements
 
+## 1.2.0 — Coffres privés, « Mes coffres » et « Communs »
+
+- **Un coffre est toujours privé quand on l'ajoute** : seul celui qui l'a ajouté (et les admins) le voit. L'option
+  « public » a disparu du jeu et le réglage `tracking.public-by-default` n'existe plus.
+- **À la mise à jour, tous les coffres déjà suivis deviennent privés** (ils étaient publics par défaut avant).
+- Sur le site, deux parties séparées en haut des pages : **Mes coffres** (seulement les tiens) et **Communs**
+  (les coffres partagés), plus **Tous** pour les admins. Accueil, inventaire, recherche, coffres, activité et joueurs
+  suivent la partie choisie.
+- Bouton **Rendre commun** sur la page d'un coffre, avec un avertissement (tout le serveur verra sa position).
+  Seul celui qui a ajouté le coffre peut le rendre commun. **Rendre privé** sur le site, ou `/coffres prive` en jeu,
+  et `/coffres prive tout` pour tous ses coffres.
+- « Localiser en jeu » : le coffre s'éteint dès qu'on l'ouvre (60 s maximum, comme avant).
+
 ## 1.1.0 — Projets de construction
 
 - **Nouvel onglet « Projets »** sur le site : envoie un plan `.litematic` (Litematica), `.schem` (WorldEdit 7+,

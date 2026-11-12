@@ -44,7 +44,7 @@
 
 ### En jeu
 - **`/coffres`** ouvre un menu. Active le **mode ajout**, puis fais un **clic droit** sur tes coffres, tonneaux
-  ou boîtes de Shulker : ils sont comptés. Reclique sur un coffre pour le retirer.
+  ou boîtes de Shulker : ils sont comptés, et ils sont **privés** (toi seul les vois). Reclique sur un coffre pour le retirer.
 - **Chaque dépôt et chaque retrait est enregistré** avec le nom du joueur.
 - Les **entonnoirs, golems de cuivre et autres machines** sont détectés et notés « automatique ».
 - Un coffre **cassé** ou **détruit par une explosion** est noté dans l'historique.
@@ -54,6 +54,9 @@
   **`/coffres projet lier <nom>`** puis un clic droit lie des coffres à un projet.
 
 ### Sur le site
+Le site a deux parties, qu'on choisit en haut des pages : **Mes coffres** (seulement ceux que tu as ajoutés) et
+**Communs** (ceux que leurs propriétaires ont partagés avec tout le serveur). Les deux ne sont jamais mélangés.
+
 | Page | Ce qu'on y trouve |
 |---|---|
 | **Accueil** | Total des objets, **la roue** de tous les objets, évolution du stock (24 h / 7 j / 30 j), dépôts et retraits par jour, joueurs les plus actifs, zones, activité récente |
@@ -62,12 +65,12 @@
 | **Objet** | Où le trouver, répartition entre les coffres, évolution, qui en a déposé ou pris |
 | **Projets** | Envoie un fichier **Litematica** ou **schematic** : tous les blocs qu'il faut, le **pourcentage** déjà réuni dans les coffres liés, ce qu'il manque |
 | **Coffres** | Rangés par zone (Base, Ferme, Mine…), avec leur remplissage |
-| **Coffre** | Ses cases **comme dans le jeu** (on peut ouvrir une shulker), son historique, renommer, passer en privé |
+| **Coffre** | Ses cases **comme dans le jeu** (on peut ouvrir une shulker), son historique, renommer, **rendre commun** ou privé |
 | **Activité** | Tout l'historique, filtrable : dépôts, retraits, automatique, par joueur, par objet |
 | **Joueurs** | Qui dépose et qui prend, sur 7 ou 30 jours, et qui est en ligne |
 
 Et partout : bouton **« Localiser en jeu »** qui fait **briller le coffre en bleu à travers les murs**, avec
-un faisceau lumineux et une flèche dans la barre d'action qui te guide jusqu'à lui.
+un faisceau lumineux et une flèche dans la barre d'action qui te guide jusqu'à lui. Il s'éteint dès que tu l'ouvres.
 
 Thème clair / sombre automatique, mise à jour en direct toutes les 5 secondes, chaque graphique peut aussi
 s'afficher en tableau.
@@ -134,7 +137,7 @@ Pour essayer : [`docs/exemples/`](docs/exemples/) contient une petite maison en 
 
 **Prérequis :** un serveur **Paper 26.2** (ou plus récent) qui tourne avec **Java 25**.
 
-1. Télécharge `Coffres-1.1.0.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
+1. Télécharge `Coffres-1.2.0.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
 2. Mets-le dans le dossier `plugins/` du serveur et démarre le serveur.
 3. **Ouvre le port du site (8125 par défaut).** C'est un port en plus de celui de Minecraft :
    - serveur chez toi : redirige le port **TCP 8125** de ta box vers la machine du serveur ;
@@ -190,7 +193,8 @@ l'écran d'accueil a sa propre session, séparée de Safari.
 | `/coffres projet lier <nom>` | Clic droit sur des coffres pour les lier au projet (ou les délier) |
 | `/coffres nom <nom>` | Renomme le coffre que tu regardes (ou celui que tu viens d'ajouter) |
 | `/coffres zone <zone>` | Range le coffre dans une zone. `/coffres zone -` pour l'enlever |
-| `/coffres prive` · `/coffres public` | Qui voit ce coffre sur le site |
+| `/coffres prive` | Remet en privé le coffre commun que tu regardes |
+| `/coffres prive tout` | Remet tous tes coffres en privé d'un coup |
 | `/coffres info` | Infos sur le coffre que tu regardes |
 | `/coffres retirer` | Ne plus suivre le coffre que tu regardes |
 | `/coffres deconnexion` | Te déconnecter du site sur tous tes appareils |
@@ -207,9 +211,18 @@ Alias : `/coffre`, `/stock`.
 
 ## Qui voit quoi
 
-- Les coffres sont **publics par défaut** : tout le serveur les voit sur le site.
-- Un coffre **privé** n'est visible que par la personne qui l'a ajouté et par les admins.
-- Seul celui qui a ajouté un coffre (ou un admin) peut le **renommer**, le **passer en privé** ou le **retirer**.
+- Un coffre est **toujours privé quand on l'ajoute** : seuls la personne qui l'a ajouté et les admins le voient
+  (contenu, position, historique). Il n'y a pas d'option pour le rendre public en jeu, et aucun réglage ne le rend
+  visible au départ : une base secrète reste secrète.
+- Pour partager un coffre, son propriétaire ouvre sa page sur le site et clique sur **Rendre commun** (le site
+  prévient que tout le serveur verra sa position). Il apparaît alors dans la partie **Communs** pour tout le monde.
+  Seul celui qui a ajouté le coffre peut le rendre commun, même un admin ne peut pas exposer le coffre d'un autre.
+- **Rendre privé** (site, ou `/coffres prive` en jeu) le cache de nouveau.
+- Sur le site, **Mes coffres** ne montre que tes coffres, **Communs** que les coffres partagés. Les admins ont en
+  plus une partie **Tous**.
+- Seul celui qui a ajouté un coffre (ou un admin) peut le **renommer** ou le **retirer**.
+- En passant de la version 1.x à la 1.2, **tous les coffres déjà suivis deviennent privés** (ils étaient publics par
+  défaut avant). Chacun peut rendre communs ceux qu'il veut partager.
 - Pour ajouter un coffre, il faut pouvoir l'ouvrir : les **protections de zone** (claims, régions) sont respectées.
 - Un **projet commun** est visible par tous, et chacun peut y lier les coffres qu'il voit. Un **projet solo** n'est
   visible que par son créateur et les admins. Seul le créateur (ou un admin) peut renommer, remplacer le fichier ou
@@ -230,7 +243,6 @@ Fichier `plugins/Coffres/config.yml` (créé au premier démarrage) :
 | `web.server-name` | `Mon serveur` | Nom affiché sur le site |
 | `tracking.containers` | `*CHEST`, `BARREL`, `*SHULKER_BOX` | Blocs suivis (`*` = n'importe quel début) |
 | `tracking.count-shulker-contents` | `true` | Compter le contenu des shulkers et sacs rangés dans les coffres |
-| `tracking.public-by-default` | `true` | Un nouveau coffre est-il visible par tous ? |
 | `tracking.chests-per-tick` | `10` | Coffres revérifiés par tick (détection des machines) |
 | `tracking.link-mode-timeout-seconds` | `180` | Le mode ajout se coupe tout seul après ce délai |
 | `tracking.auto-group-seconds` | `60` | Regroupement des mouvements automatiques dans l'historique |
@@ -315,7 +327,7 @@ Ce que Coffres **ne compte pas** : le coffre de l'Ender (il est personnel) et le
 ./gradlew build
 ```
 
-Le plugin est créé dans `build/libs/Coffres-1.1.0.jar`. Les tests unitaires (comptage, historique, visibilité, lecture des schémas,
+Le plugin est créé dans `build/libs/Coffres-1.2.0.jar`. Les tests unitaires (comptage, historique, visibilité, lecture des schémas,
 connexion) sont lancés automatiquement. Sur Linux/macOS, si besoin : `chmod +x gradlew`.
 
 Chaque push sur GitHub compile le plugin (onglet **Actions**), et publier une **Release** y joint le `.jar`
@@ -355,6 +367,8 @@ branding/                     kit du logo (icônes, logos, guide)
 ### API du site
 
 Toutes les réponses sont en JSON. Les routes marquées 🔒 demandent l'en-tête `Authorization: Bearer <jeton>`.
+`overview`, `items`, `item`, `chests`, `activity` et `players` acceptent `?view=mine` (mes coffres) ou `?view=common`
+(coffres communs) ; sans ce paramètre, elles renvoient tout ce que le joueur a le droit de voir.
 
 | Route | Rôle |
 |---|---|
@@ -367,7 +381,7 @@ Toutes les réponses sont en JSON. Les routes marquées 🔒 demandent l'en-têt
 | 🔒 `GET /api/items` | Tous les objets et leurs quantités |
 | 🔒 `GET /api/item/{id}?days=7` | Un objet : coffres, évolution, joueurs, mouvements |
 | 🔒 `GET /api/chests` | Tous les coffres visibles |
-| 🔒 `GET` · `POST /api/chest/{id}` | Un coffre / le modifier `{name, zone, pub}` |
+| 🔒 `GET` · `POST /api/chest/{id}` | Un coffre / le modifier `{name, zone, pub}` (`pub: true` = commun, propriétaire seulement) |
 | 🔒 `POST /api/locate` `{chests:[…]}` | Faire briller des coffres en jeu |
 | 🔒 `GET /api/activity?kind=&player=&item=&chest=&before=` | Historique |
 | 🔒 `GET /api/players?days=30` | Statistiques par joueur |
