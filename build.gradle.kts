@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "fr.coffres"
-version = "1.2.0"
+version = "1.2.1"
 
 val paperApi = "io.papermc.paper:paper-api:26.2.build.135-stable"
 

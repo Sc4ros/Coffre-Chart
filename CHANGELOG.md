@@ -1,5 +1,11 @@
 # Changements
 
+## 1.2.1 — Correctif d'affichage
+
+- Page d'un coffre : les cases vides étaient plus grandes que les autres et la grille se déformait (téléphone et PC).
+  Toutes les cases sont de nouveau carrées et de la même taille.
+- Site installé sur iPhone : la page ne passe plus sous l'heure et la batterie quand on la fait défiler.
+
 ## 1.2.0 — Coffres privés, « Mes coffres » et « Communs »
 
 - **Un coffre est toujours privé quand on l'ajoute** : seul celui qui l'a ajouté (et les admins) le voit. L'option

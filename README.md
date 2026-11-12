@@ -137,7 +137,7 @@ Pour essayer : [`docs/exemples/`](docs/exemples/) contient une petite maison en 
 
 **Prérequis :** un serveur **Paper 26.2** (ou plus récent) qui tourne avec **Java 25**.
 
-1. Télécharge `Coffres-1.2.0.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
+1. Télécharge `Coffres-1.2.1.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
 2. Mets-le dans le dossier `plugins/` du serveur et démarre le serveur.
 3. **Ouvre le port du site (8125 par défaut).** C'est un port en plus de celui de Minecraft :
    - serveur chez toi : redirige le port **TCP 8125** de ta box vers la machine du serveur ;
@@ -327,7 +327,7 @@ Ce que Coffres **ne compte pas** : le coffre de l'Ender (il est personnel) et le
 ./gradlew build
 ```
 
-Le plugin est créé dans `build/libs/Coffres-1.2.0.jar`. Les tests unitaires (comptage, historique, visibilité, lecture des schémas,
+Le plugin est créé dans `build/libs/Coffres-1.2.1.jar`. Les tests unitaires (comptage, historique, visibilité, lecture des schémas,
 connexion) sont lancés automatiquement. Sur Linux/macOS, si besoin : `chmod +x gradlew`.
 
 Chaque push sur GitHub compile le plugin (onglet **Actions**), et publier une **Release** y joint le `.jar`
