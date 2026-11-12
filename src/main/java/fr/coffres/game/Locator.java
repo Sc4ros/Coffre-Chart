@@ -35,6 +35,8 @@ import java.util.UUID;
 /**
  * "Localiser en jeu": makes containers glow through walls for one player only,
  * draws a light beam above them and shows the direction in the action bar.
+ * A container stops glowing as soon as the player opens it; the whole thing ends when the last one is opened,
+ * after {@code locate.duration-seconds}, when the player changes world or logs out.
  */
 public final class Locator {
 
@@ -48,7 +50,8 @@ public final class Locator {
 
     private final class Run {
         final List<StoredChest> targets;
-        final List<ItemDisplay> displays = new ArrayList<>();
+        /** Glowing copies, by container id (two for a double chest). */
+        final Map<String, List<ItemDisplay>> displays = new HashMap<>();
         final java.util.Set<String> glowing = new java.util.HashSet<>();
         BukkitTask task;
         int ticks;
@@ -92,7 +95,7 @@ public final class Locator {
             return "Ce coffre est dans " + where + ", pas dans le monde où tu es.";
         }
         here.sort((a, b) -> Double.compare(dist2(p, a), dist2(p, b)));
-        Run run = new Run(here.size() > 8 ? new ArrayList<>(here.subList(0, 8)) : here);
+        Run run = new Run(new ArrayList<>(here.size() > 8 ? here.subList(0, 8) : here));
         spawnLoaded(p, run);
         runs.put(p.getUniqueId(), run);
         int maxTicks = durationSeconds * 20;
@@ -116,11 +119,32 @@ public final class Locator {
                 Placeholder.unparsed("dist", String.valueOf(Math.round(Math.sqrt(dist2(p, near))))),
                 Placeholder.unparsed("dir", dir));
         if (run.targets.size() > 1) {
-            Msg.send(p, "<gray>" + run.targets.size() + " coffres brillent en bleu pendant " + durationSeconds + " s.</gray>");
+            Msg.send(p, "<gray>" + run.targets.size() + " coffres brillent en bleu : chacun s'éteint quand tu l'ouvres (" + durationSeconds + " s maximum).</gray>");
         }
         return run.targets.size() > 1
-                ? run.targets.size() + " coffres brillent en jeu pendant " + durationSeconds + " s."
-                : "« " + near.name + " » brille en jeu pendant " + durationSeconds + " s.";
+                ? run.targets.size() + " coffres brillent en jeu : chacun s'éteint quand tu l'ouvres (" + durationSeconds + " s maximum)."
+                : "« " + near.name + " » brille en jeu jusqu'à ce que tu l'ouvres (" + durationSeconds + " s maximum).";
+    }
+
+    /** The player opened a container: if it was glowing for them it goes out, and everything stops when it was the last one. */
+    public void opened(Player p, String chestId) {
+        Run run = runs.get(p.getUniqueId());
+        if (run == null || !run.targets.removeIf(c -> c.id.equals(chestId))) {
+            return;
+        }
+        run.glowing.remove(chestId);
+        List<ItemDisplay> ds = run.displays.remove(chestId);
+        if (ds != null) {
+            for (ItemDisplay d : ds) {
+                if (d.isValid()) {
+                    d.remove();
+                }
+            }
+        }
+        if (run.targets.isEmpty()) {
+            stop(p.getUniqueId());
+            Msg.actionBar(p, "<green>✔ Coffre trouvé</green>");
+        }
     }
 
     /** Glow for every target whose chunk is loaded (never loads chunks; far chests light up as the player gets closer). */
@@ -161,7 +185,7 @@ public final class Locator {
             ent.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(1.04f, 1.04f, 1.04f), new AxisAngle4f()));
         });
         p.showEntity(plugin, d);
-        run.displays.add(d);
+        run.displays.computeIfAbsent(c.id, k -> new ArrayList<>()).add(d);
     }
 
     private static float yawOf(BlockFace f) {
@@ -253,9 +277,11 @@ public final class Locator {
         if (run.task != null) {
             run.task.cancel();
         }
-        for (ItemDisplay d : run.displays) {
-            if (d.isValid()) {
-                d.remove();
+        for (List<ItemDisplay> ds : run.displays.values()) {
+            for (ItemDisplay d : ds) {
+                if (d.isValid()) {
+                    d.remove();
+                }
             }
         }
         Player p = Bukkit.getPlayer(player);

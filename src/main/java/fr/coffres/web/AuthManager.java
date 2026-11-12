@@ -35,6 +35,27 @@ public final class AuthManager {
         public long created;
         public long lastSeen;
         public long expires;
+        /**
+         * Request-only part of the site the player is looking at: {@link #MINE} (the containers they added),
+         * {@link #COMMON} (shared containers) or null (everything they may see). Never saved.
+         */
+        public transient String view;
+
+        public static final String MINE = "mine";
+        public static final String COMMON = "common";
+
+        /** A copy of this session limited to one part of the site ("mine" or "common"; anything else = everything). */
+        public Session view(String part) {
+            Session s = new Session();
+            s.uuid = uuid;
+            s.name = name;
+            s.admin = admin;
+            s.created = created;
+            s.lastSeen = lastSeen;
+            s.expires = expires;
+            s.view = MINE.equals(part) ? MINE : COMMON.equals(part) ? COMMON : null;
+            return s;
+        }
     }
 
     private record Pending(UUID uuid, String name, boolean admin, long expires) {

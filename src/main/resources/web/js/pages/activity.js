@@ -20,7 +20,7 @@ export function activityPage(root, _params, query) {
   const chips = h('div.chips', { role: 'toolbar', 'aria-label': 'Filtres' });
   const list = h('div', skeleton(1));
   const more = h('button.btn.plain.block', { type: 'button', style: { marginTop: '12px', display: 'none' } }, 'Afficher plus');
-  root.append(header('Activité', { sub: 'Tout ce qui entre et sort des coffres.' }), chips, list, more);
+  root.append(header('Activité', { sub: 'Tout ce qui entre et sort des coffres.', view: () => { list.replaceChildren(skeleton(1)); load(); } }), chips, list, more);
 
   function syncUrl() {
     const p = new URLSearchParams();
@@ -96,6 +96,7 @@ export function playersPage(root) {
   root.append(header('Joueurs', {
     sub: 'Qui dépose et qui prend.',
     actions: segmented([[7, '7 j'], [30, '30 j']], days, (v) => { days = v; store.set('playersDays', v); load(); }, 'Période'),
+    view: () => { body.replaceChildren(skeleton(2)); load(); },
   }), body);
 
   async function load() {

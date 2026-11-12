@@ -25,8 +25,6 @@ tracking:
     - "*SHULKER_BOX"
   # Compter aussi ce qu'il y a DANS les boîtes de Shulker et les sacs rangés dans les coffres.
   count-shulker-contents: true
-  # Un coffre ajouté est-il visible par tout le monde sur le site ? (chacun peut passer le sien en privé)
-  public-by-default: true
   # Nombre de coffres revérifiés par tick (détecte entonnoirs, golems de cuivre, etc.).
   chests-per-tick: 10
   # Le mode ajout se coupe tout seul après ce délai (secondes).

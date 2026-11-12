@@ -1,9 +1,9 @@
 // Coffres (all containers, grouped by zone) and one container's page (its slots, like in game).
 import { h, icon, fmt, compact, plural, store, debounce, norm, ago, where, dimName, toast, sheet } from '../util.js';
-import { api, session } from '../api.js';
+import { api, session, currentView } from '../api.js';
 import { itemIcon, itemName, initAssets } from '../icons.js';
 import { meter, showTip, hideTip, tipTitle, tipRow } from '../charts.js';
-import { header, card, segmented, feed, empty, skeleton, errorBox, itemRow, placeText, distanceBadge, locateButton } from '../ui.js';
+import { header, card, segmented, feed, empty, skeleton, errorBox, itemRow, placeText, distanceBadge, locateButton, viewEmpty } from '../ui.js';
 
 const TYPE_NAMES = { chest: 'Coffre', trapped_chest: 'Coffre piégé', barrel: 'Tonneau' };
 export function typeName(t) {
@@ -19,12 +19,12 @@ function chestCard(c) {
     h('div.top',
       h('div.ic-box', itemIcon(c.type || 'chest')),
       h('div', { style: { minWidth: 0, flex: 1 } },
-        h('div.nm', c.name, c.pub ? null : h('span.lock', { title: 'Privé' }, ' 🔒')),
+        h('div.nm', c.name, c.pub ? h('span.badge.common', 'Commun') : h('span.lock', { title: 'Privé' }, ' 🔒')),
         h('div.co', `${c.zone ? c.zone + ' · ' : ''}${placeText(c)}`))),
     meter(c.used, c.size),
     h('div.mini', c.top.length ? c.top.map((t) => h('span', { title: itemName(t.id) }, itemIcon(t.id, 's'), compact(t.n)))
       : h('span', 'Vide'), c.distinct > c.top.length ? h('span', `+${c.distinct - c.top.length}`) : null),
-    h('div.foot', `${compact(c.items)} objets · modifié ${ago(c.updated)}${c.lastPlayer ? ' par ' + c.lastPlayer : ''}`, ' ', distanceBadge(c)));
+    h('div.foot', `${c.mine ? '' : `à ${c.owner || '?'} · `}${compact(c.items)} objets · modifié ${ago(c.updated)}${c.lastPlayer ? ' par ' + c.lastPlayer : ''}`, ' ', distanceBadge(c)));
 }
 
 // ───────── list ─────────
@@ -34,7 +34,7 @@ export function chestsPage(root, _params, query) {
   let q = query.get('zone') || '';
   let chests = null;
   let alive = true;
-  const head = header('Coffres');
+  const head = header('Coffres', { view: () => { chests = null; body.replaceChildren(skeleton(2)); load(); } });
   const sub = h('div.sub', ' ');
   head.querySelector('.t').appendChild(sub);
   const input = h('input', { type: 'search', placeholder: 'Nom ou zone', value: q, 'aria-label': 'Filtrer les coffres', autocomplete: 'off' });
@@ -58,11 +58,7 @@ export function chestsPage(root, _params, query) {
     const zones = new Set(chests.map((c) => c.zone || ''));
     sub.textContent = `${plural(chests.length, 'coffre', 'coffres')} · ${plural([...zones].filter(Boolean).length, 'zone', 'zones')}`;
     if (!chests.length) {
-      body.replaceChildren(card(null, empty('📦', 'Aucun coffre suivi', null,
-        h('ol.steps', { style: { textAlign: 'left', display: 'inline-flex' } },
-          h('li', 'En jeu, tape ', h('code', '/coffres')),
-          h('li', 'Clique sur « Ajouter des coffres »'),
-          h('li', 'Fais un clic droit sur tes coffres, tonneaux ou shulkers')))));
+      body.replaceChildren(card(null, viewEmpty(currentView())));
       return;
     }
     const nq = norm(q);
@@ -154,20 +150,16 @@ function editSheet(c, onSaved) {
     api('chests').then((all) => {
       for (const z of new Set(all.map((x) => x.zone).filter(Boolean))) zl.appendChild(h('option', { value: z }));
     }).catch(() => {});
-    const pub = h('input', { type: 'checkbox', role: 'switch' });
-    pub.checked = c.pub;
     const save = h('button.btn', { type: 'submit' }, 'Enregistrer');
     const form = h('form',
       h('label.field', h('span', 'Nom'), name),
       h('label.field', h('span', 'Zone'), zone, zl),
-      h('div.switch-row', h('div', h('div', { style: { fontWeight: 600 } }, 'Visible par tout le serveur'),
-        h('div.note', 'Sinon, seuls toi et les admins le voient sur le site.')), h('label.switch', pub, h('i'))),
       h('div.btns', h('button.btn.plain', { type: 'button', onclick: () => close() }, 'Annuler'), save));
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       save.disabled = true;
       try {
-        const updated = await api('chest/' + c.id, { method: 'POST', body: { name: name.value, zone: zone.value, pub: pub.checked } });
+        const updated = await api('chest/' + c.id, { method: 'POST', body: { name: name.value, zone: zone.value } });
         close();
         toast('Coffre enregistré');
         onSaved(updated);
@@ -179,6 +171,27 @@ function editSheet(c, onSaved) {
     setTimeout(() => name.focus(), 50);
     return form;
   });
+}
+
+/** "Rendre commun" (only the player who added it, after a warning) or "Rendre privé" (owner or admin). */
+function shareButton(c, onSaved) {
+  if (!c.pub && !c.mine) return null;
+  if (c.pub && !c.canEdit) return null;
+  const toCommon = !c.pub;
+  const b = h('button', { class: toCommon ? 'btn soft' : 'btn plain', type: 'button' }, icon(toCommon ? 'users' : 'lock'), toCommon ? 'Rendre commun' : 'Rendre privé');
+  b.addEventListener('click', async () => {
+    if (toCommon && !confirm(`Rendre « ${c.name} » commun ?\n\nTout le serveur verra sa position (${c.x} ${c.y} ${c.z}), son contenu et son historique. Tu pourras le remettre en privé quand tu veux.`)) return;
+    b.disabled = true;
+    try {
+      const updated = await api('chest/' + c.id, { method: 'POST', body: { pub: toCommon } });
+      toast(toCommon ? 'Coffre commun : tout le serveur le voit' : 'Coffre privé : toi seul le vois');
+      onSaved(updated);
+    } catch (e) {
+      toast(e.message, true);
+      b.disabled = false;
+    }
+  });
+  return b;
 }
 
 export function chestPage(root, [id]) {
@@ -202,10 +215,11 @@ export function chestPage(root, [id]) {
     const head = h('div.head',
       h('div.t',
         h('div.kicker', `${typeName(c.type)}${c.dbl ? ' double' : ''}${c.zone ? ' · ' + c.zone : ''}`),
-        h('h1', c.name, c.pub ? null : h('span.lock', { title: 'Privé' }, ' 🔒')),
+        h('h1', c.name, c.pub ? h('span.badge.common', 'Commun') : h('span.lock', { title: 'Privé' }, ' 🔒')),
         h('div.sub', `${c.x} · ${c.y} · ${c.z} — ${dimName(c.dim)}`, ' ', distanceBadge(c))));
     const actions = h('div.actions',
       locateButton([c.id]),
+      shareButton(c, show),
       c.canEdit ? h('button.btn.plain', { type: 'button', onclick: () => editSheet(c, show) }, icon('edit'), 'Modifier') : null);
 
     const contents = card('Contenu', h('div', slotGrid(c), h('div', { style: { marginTop: '14px', maxWidth: '540px' } }, meter(c.used, c.size))),
@@ -216,7 +230,7 @@ export function chestPage(root, [id]) {
       h('dt', 'Ajouté'), h('dd', ago(c.created)),
       h('dt', 'Dernier changement'), h('dd', ago(c.updated)),
       c.lastPlayer ? [h('dt', 'Dernier joueur'), h('dd', c.lastPlayer)] : null,
-      h('dt', 'Visibilité'), h('dd', c.pub ? 'Tout le serveur' : 'Privé')));
+      h('dt', 'Visibilité'), h('dd', c.pub ? 'Commun : tout le serveur' : c.mine ? 'Privé : toi seul' : `Privé (à ${c.owner || '?'})`)));
     const history = card('Historique', c.recent.length ? feed(c.recent, { days: true }) : h('p.note', { style: { padding: '0 16px 12px' } }, 'Rien pour le moment.'),
       { cls: 'flush wide', more: { href: '#/activite?coffre=' + c.id, label: 'Tout voir' } });
     body.replaceChildren(head, actions, h('div.grid.two', h('div.wide', contents), totals, info, history));

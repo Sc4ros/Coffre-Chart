@@ -357,15 +357,16 @@ public final class WebServer {
             m.put("pos", pos);
             m.put("players", game.onlinePlayers());
             m.put("rev", store.rev());
+            m.put("counts", api.counts(s));
             sendJson(ex, 200, m);
             return;
         }
         if (route.equals("overview")) {
-            sendJson(ex, 200, api.overview(s, days(q, 7)));
+            sendJson(ex, 200, api.overview(s.view(q.get("view")), days(q, 7)));
             return;
         }
         if (route.equals("items")) {
-            sendJson(ex, 200, api.items(s));
+            sendJson(ex, 200, api.items(s.view(q.get("view"))));
             return;
         }
         if (route.startsWith("item/")) {
@@ -373,11 +374,11 @@ public final class WebServer {
             if (!ITEM_ID.matcher(id).matches()) {
                 throw new HttpError(400, "Objet invalide.");
             }
-            sendJson(ex, 200, api.item(s, id, days(q, 7)));
+            sendJson(ex, 200, api.item(s.view(q.get("view")), id, days(q, 7)));
             return;
         }
         if (route.equals("chests")) {
-            sendJson(ex, 200, api.chests(s));
+            sendJson(ex, 200, api.chests(s.view(q.get("view"))));
             return;
         }
         if (route.startsWith("chest/")) {
@@ -391,6 +392,10 @@ public final class WebServer {
                 }
                 JsonObject b = body(ex);
                 Boolean pub = b.has("pub") && !b.get("pub").isJsonNull() ? b.get("pub").getAsBoolean() : null;
+                // Sharing shows the position to the whole server: only the player who added the container may do it.
+                if (Boolean.TRUE.equals(pub) && !api.isOwner(s, id)) {
+                    throw new HttpError(403, "Seul celui qui a ajouté ce coffre peut le rendre commun.");
+                }
                 store.edit(id, str(b, "name"), str(b, "zone"), pub);
             }
             Map<String, Object> c = api.chest(s, id);
@@ -425,12 +430,12 @@ public final class WebServer {
             long before = parseLong(q.get("before"), Long.MAX_VALUE);
             int limit = (int) parseLong(q.get("limit"), 50);
             String kind = q.get("kind");
-            sendJson(ex, 200, api.activity(s, blankToNull(q.get("chest")), blankToNull(q.get("item")),
+            sendJson(ex, 200, api.activity(s.view(q.get("view")), blankToNull(q.get("chest")), blankToNull(q.get("item")),
                     blankToNull(q.get("player")), blankToNull(kind), before, limit));
             return;
         }
         if (route.equals("players")) {
-            sendJson(ex, 200, api.players(s, days(q, 30)));
+            sendJson(ex, 200, api.players(s.view(q.get("view")), days(q, 30)));
             return;
         }
         if (route.equals("projects")) {

@@ -304,6 +304,7 @@ function linkSheet(p, onSaved) {
     draw();
     return h('div',
       h('p.note', { style: { marginBottom: '12px' } }, 'Coche les coffres où sont rangés les matériaux : leur contenu compte pour le projet. Ceux qui ont déjà des blocs utiles sont en haut.'),
+      p.shared ? h('p.note.hint', icon('lock'), 'Tes coffres privés ne comptent que pour toi. Pour que tout le monde les voie dans ce projet, rends-les communs depuis leur page.') : null,
       h('label.searchbox', icon('search'), input),
       listBox,
       h('p.note', { style: { marginBottom: '10px' } }, 'En jeu, tu peux aussi faire ', h('code', `/coffres projet lier ${p.name}`), ' puis un clic droit sur les coffres.'),

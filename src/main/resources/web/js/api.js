@@ -13,8 +13,26 @@ export class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+// ───────── part of the site: "Mes coffres" (what I added) or "Communs" (shared), and "Tous" for admins ─────────
+
+const SCOPED = /^(overview|items|item\/|chests|activity|players)(\?|$)/;
+
+export function currentView() {
+  const v = store.get('view', 'mine');
+  if (v === 'all') return session.me && session.me.admin ? 'all' : 'mine';
+  return v === 'common' ? 'common' : 'mine';
+}
+export function setView(v) { store.set('view', v); }
+
+/** Adds the part of the site to the routes that list containers (not to one container's own page or history). */
+function withView(path, method) {
+  if (method !== 'GET' || !SCOPED.test(path) || /[?&]chest=/.test(path)) return path;
+  return path + (path.includes('?') ? '&' : '?') + 'view=' + currentView();
+}
+
 /** body: an object (sent as JSON) or a File/Blob (sent as is, e.g. a .litematic plan). */
 export async function api(path, { method = 'GET', body, signal } = {}) {
+  path = withView(path, method);
   const headers = { Accept: 'application/json' };
   if (token) headers.Authorization = 'Bearer ' + token;
   const raw = typeof Blob !== 'undefined' && body instanceof Blob;

@@ -1,14 +1,40 @@
 // Building blocks shared by the pages.
 import { h, icon, fmt, ago, avatar, signed, dayTitle, startOfDay, where, dimName, toast } from './util.js';
 import { itemIcon, itemName } from './icons.js';
-import { locate, session } from './api.js';
+import { locate, session, currentView, setView } from './api.js';
 
-export function header(title, { sub, kicker, back, actions } = {}) {
+/** view: called with "mine" / "common" / "all" when the player switches between their containers and the shared ones. */
+export function header(title, { sub, kicker, back, actions, view } = {}) {
   return h('header',
     back ? h('button.back', { onclick: () => (history.length > 1 ? history.back() : (location.hash = back.href)) }, icon('back'), back.label) : null,
     h('div.head',
       h('div.t', kicker ? h('div.kicker', kicker) : null, h('h1', title), sub ? h('div.sub', sub) : null),
-      actions || null));
+      actions || null),
+    view ? viewSwitch(view) : null);
+}
+
+/** "Mes coffres" (only what I added) · "Communs" (shared by their owners) · "Tous" (admins only). Remembered on this device. */
+export function viewSwitch(onChange) {
+  const me = session.me || {};
+  const n = me.counts || {};
+  const opt = (v, label, count) => [v, [label, h('span.seg-n', fmt(count || 0))]];
+  const opts = [opt('mine', 'Mes coffres', n.mine), opt('common', 'Communs', n.common)];
+  if (me.admin) opts.push(opt('all', 'Tous', n.all));
+  return h('div.view-row', segmented(opts, currentView(), (v) => { setView(v); onChange(v); }, 'Quels coffres afficher'));
+}
+
+/** Short text for empty pages, depending on the part of the site. */
+export function viewEmpty(view) {
+  if (view === 'common') {
+    return empty('🤝', 'Aucun coffre commun pour l\'instant',
+      'Un coffre est privé quand on l\'ajoute. Pour le partager avec tout le serveur, ouvre sa page dans « Mes coffres » puis « Rendre commun ».');
+  }
+  return empty('📦', view === 'all' ? 'Aucun coffre suivi' : 'Tu n\'as encore ajouté aucun coffre', null,
+    h('ol.steps', { style: { textAlign: 'left', display: 'inline-flex' } },
+      h('li', 'En jeu, tape ', h('code', '/coffres')),
+      h('li', 'Clique sur « Ajouter des coffres »'),
+      h('li', 'Fais un clic droit sur tes coffres, tonneaux ou shulkers'),
+      h('li', 'Ils restent privés : toi seul les vois')));
 }
 
 export function card(title, body, { more, cls = '', tools } = {}) {

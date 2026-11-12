@@ -128,8 +128,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
                 : cfg.getStringList("tracking.containers"));
         store.configure(cfg.getBoolean("tracking.count-shulker-contents", true),
                 cfg.getInt("history.retention-days", 60), cfg.getInt("history.max-entries", 300_000));
-        tracker.configure(cfg.getInt("tracking.chests-per-tick", 10), cfg.getInt("tracking.auto-group-seconds", 60),
-                cfg.getBoolean("tracking.public-by-default", true));
+        tracker.configure(cfg.getInt("tracking.chests-per-tick", 10), cfg.getInt("tracking.auto-group-seconds", 60));
         linkMode.setTimeoutSeconds(cfg.getInt("tracking.link-mode-timeout-seconds", 180));
         locator.setDurationSeconds(cfg.getInt("locate.duration-seconds", 60));
         auth.setSessionDays(cfg.getInt("auth.session-days", 180));

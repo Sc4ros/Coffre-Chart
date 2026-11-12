@@ -93,7 +93,6 @@ public final class ChestTracker implements Listener {
 
     private int perTick = 10;
     private long autoGroupMillis = 60_000;
-    private boolean publicByDefault = true;
 
     public ChestTracker(CoffresPlugin plugin, DataStore store, Containers containers) {
         this.plugin = plugin;
@@ -101,10 +100,9 @@ public final class ChestTracker implements Listener {
         this.containers = containers;
     }
 
-    public void configure(int perTick, int autoGroupSeconds, boolean publicByDefault) {
+    public void configure(int perTick, int autoGroupSeconds) {
         this.perTick = Math.max(1, perTick);
         this.autoGroupMillis = Math.max(5, autoGroupSeconds) * 1000L;
-        this.publicByDefault = publicByDefault;
     }
 
     // ------------------------------------------------------------------ tick
@@ -388,7 +386,7 @@ public final class ChestTracker implements Listener {
         c.zone = store.nearestZone(c.world, c.x, c.y, c.z, 32);
         c.owner = p.getUniqueId().toString();
         c.ownerName = p.getName();
-        c.pub = publicByDefault;
+        c.pub = false; // always private when added: only its owner (and admins) can see it until they make it shared
         c.created = now;
         c.lastPlayer = p.getName();
         ItemStack[] contents = inv.getContents();
@@ -408,9 +406,8 @@ public final class ChestTracker implements Listener {
                 Placeholder.unparsed("zone", c.zone == null ? "" : c.zone),
                 Placeholder.unparsed("count", Msg.number(items)));
         Msg.send(p, "  <click:suggest_command:'/coffres nom '><hover:show_text:'Donner un nom à ce coffre'><aqua>[Renommer]</aqua></hover></click> "
-                + "<click:suggest_command:'/coffres zone '><hover:show_text:'Ranger ce coffre dans une zone (Base, Ferme…)'><aqua>[Zone]</aqua></hover></click> "
-                + (c.pub ? "<click:run_command:'/coffres prive'><hover:show_text:'Seuls toi et les admins le verront sur le site'><aqua>[Rendre privé]</aqua></hover></click>"
-                : "<click:run_command:'/coffres public'><hover:show_text:'Tout le serveur le verra sur le site'><aqua>[Rendre public]</aqua></hover></click>"));
+                + "<click:suggest_command:'/coffres zone '><hover:show_text:'Ranger ce coffre dans une zone (Base, Ferme…)'><aqua>[Zone]</aqua></hover></click>");
+        Msg.raw(p, "  <gold>🔒</gold> <gray>Privé : toi seul le vois. Pour le partager, rends-le <white>commun</white> depuis sa page sur le site.</gray>");
         return c;
     }
 
@@ -466,6 +463,9 @@ public final class ChestTracker implements Listener {
         if (c != null) {
             dirty.remove(c.id);
             refresh(c.id, actors.remove(c.id));
+            if (e.getPlayer() instanceof Player p) {
+                plugin.locator().opened(p, c.id);
+            }
         }
     }
 

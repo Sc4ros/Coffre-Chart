@@ -54,7 +54,7 @@ export function settingsPage(root) {
     ['/coffres projet lier …', 'clic droit sur des coffres pour les lier à un projet'],
     ['/coffres nom …', 'renomme le coffre que tu regardes'],
     ['/coffres zone …', 'range-le dans une zone'],
-    ['/coffres prive', 'le cacher aux autres joueurs'],
+    ['/coffres prive', 'remettre en privé un coffre commun (« tout » pour tous tes coffres)'],
   ];
   const game = card('En jeu', h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
     cmds.map(([c, d]) => h('div', h('code', c), h('div.note', { style: { marginTop: '3px' } }, d)))));

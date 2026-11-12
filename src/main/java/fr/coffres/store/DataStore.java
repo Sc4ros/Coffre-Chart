@@ -45,6 +45,11 @@ public final class DataStore {
         public long removed;
     }
 
+    /**
+     * Version of chests.json. 2: containers are private until their owner makes them shared on the site
+     * (version 1 made them visible to everyone by default).
+     */
+    private static final int FORMAT = 2;
     private static final String ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -132,6 +137,10 @@ public final class DataStore {
                     if (stacks != null) {
                         stackSizes.putAll(stacks);
                     }
+                    int version = doc.has("version") ? doc.get("version").getAsInt() : 1;
+                    if (version < FORMAT) {
+                        migratePrivate();
+                    }
                 }
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "chests.json illisible, une copie est gardée en chests.json.broken", e);
@@ -177,6 +186,28 @@ public final class DataStore {
         rev.incrementAndGet();
     }
 
+    /**
+     * Data from version 1: containers were visible to everyone by default, so most of them were not shared on purpose.
+     * Once, every container becomes private; owners can make theirs shared again from the site.
+     */
+    private void migratePrivate() {
+        int n = 0;
+        for (StoredChest c : chests.values()) {
+            if (c.pub) {
+                c.pub = false;
+                n++;
+            }
+        }
+        for (Tomb t : removed.values()) {
+            t.pub = false;
+        }
+        dirty = true;
+        if (n > 0) {
+            logger.info(n + " coffre(s) passé(s) en privé : un coffre est maintenant privé tant que son propriétaire"
+                    + " ne le rend pas commun depuis le site.");
+        }
+    }
+
     /** Writes pending changes to disk. Safe to call from any thread. */
     public void save() {
         synchronized (fileLock) {
@@ -187,7 +218,7 @@ public final class DataStore {
                 pruneLocked();
                 if (dirty) {
                     JsonObject doc = new JsonObject();
-                    doc.addProperty("version", 1);
+                    doc.addProperty("version", FORMAT);
                     doc.addProperty("counter", counter);
                     doc.add("chests", gson.toJsonTree(new ArrayList<>(chests.values())));
                     doc.add("removed", gson.toJsonTree(removed));

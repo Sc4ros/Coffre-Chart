@@ -1,9 +1,9 @@
 // Accueil: totals, the wheel of every item, trends, players, zones and the latest activity.
 import { h, icon, fmt, compact, pct, plural, store, avatar, ago, time, weekday, dayShort } from '../util.js';
-import { api, session } from '../api.js';
+import { api, session, currentView } from '../api.js';
 import { itemIcon, itemName, initAssets } from '../icons.js';
 import { wheel, timeChart, inOutChart, hbars, meter, table, SERIES, OTHER } from '../charts.js';
-import { header, card, chartCard, segmented, feed, empty, skeleton, errorBox } from '../ui.js';
+import { header, card, chartCard, segmented, feed, empty, skeleton, errorBox, viewEmpty } from '../ui.js';
 import { projectsHomeCard } from './projects.js';
 
 /** Keeps each item on the same wheel color from one visit to the next. */
@@ -45,8 +45,14 @@ export default function home(root) {
   let days = store.get('homeDays', 7);
   let alive = true;
   const body = h('div', skeleton(3));
+  const titles = { mine: 'Tes coffres', common: 'Coffres communs', all: 'Tous les coffres' };
+  const head = header(titles[currentView()], {
+    kicker: `Salut ${session.me.name}`,
+    actions: statusActions(),
+    view: (v) => { head.querySelector('h1').textContent = titles[v]; body.replaceChildren(skeleton(3)); load(); },
+  });
   root.append(
-    header('Tes coffres', { kicker: `Salut ${session.me.name}`, actions: statusActions() }),
+    head,
     h('a.searchbox', { href: '#/chercher' }, icon('search'), h('span', 'Chercher un objet ou un coffre')),
     body);
 
@@ -63,8 +69,7 @@ export default function home(root) {
   function render(d) {
     const k = d.kpi;
     if (k.chests === 0) {
-      return card(null, empty('📦', 'Aucun coffre suivi pour l\'instant',
-        'En jeu, tape /coffres puis « Ajouter des coffres », et fais un clic droit sur tes coffres, tonneaux ou shulkers. Ils apparaîtront ici.'));
+      return h('div.grid.two', card(null, viewEmpty(currentView()), { cls: 'wide' }), projectsHomeCard(d.projects));
     }
 
     const hero = card(null, h('div.hero',

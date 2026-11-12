@@ -43,7 +43,22 @@ public final class Api {
 
     // ------------------------------------------------------------------ visibility
 
+    /**
+     * What the player sees in the part of the site they are looking at:
+     * "Mes coffres" = only the containers they added, "Communs" = shared containers, otherwise everything allowed.
+     */
     static boolean visible(StoredChest c, AuthManager.Session s) {
+        if (AuthManager.Session.MINE.equals(s.view)) {
+            return Objects.equals(c.owner, s.uuid);
+        }
+        if (AuthManager.Session.COMMON.equals(s.view)) {
+            return c.pub;
+        }
+        return visibleAll(c, s);
+    }
+
+    /** Everything the player is allowed to see, whatever the part of the site (used for projects): shared, theirs, or all for admins. */
+    static boolean visibleAll(StoredChest c, AuthManager.Session s) {
         return c.pub || s.admin || Objects.equals(c.owner, s.uuid);
     }
 
@@ -55,7 +70,13 @@ public final class Api {
                 return visible(c, s);
             }
             DataStore.Tomb t = store.tombLocked(k);
-            return t == null || t.pub || s.admin || Objects.equals(t.owner, s.uuid);
+            if (AuthManager.Session.MINE.equals(s.view)) {
+                return t != null && Objects.equals(t.owner, s.uuid);
+            }
+            if (AuthManager.Session.COMMON.equals(s.view)) {
+                return t != null && t.pub;
+            }
+            return t == null ? s.admin : t.pub || s.admin || Objects.equals(t.owner, s.uuid);
         });
     }
 
@@ -71,6 +92,31 @@ public final class Api {
             }
         }
         return out;
+    }
+
+    /** How many containers are in each part of the site for this player: theirs, shared, everything they may see. */
+    public Map<String, Integer> counts(AuthManager.Session s) {
+        synchronized (store) {
+            int mine = 0;
+            int common = 0;
+            int all = 0;
+            for (StoredChest c : store.chestsLocked()) {
+                if (Objects.equals(c.owner, s.uuid)) {
+                    mine++;
+                }
+                if (c.pub) {
+                    common++;
+                }
+                if (visibleAll(c, s)) {
+                    all++;
+                }
+            }
+            Map<String, Integer> m = new LinkedHashMap<>();
+            m.put("mine", mine);
+            m.put("common", common);
+            m.put("all", all);
+            return m;
+        }
     }
 
     private static Map<String, Long> aggregate(List<StoredChest> chests) {
@@ -268,6 +314,7 @@ public final class Api {
         m.put("created", c.created);
         m.put("lastPlayer", c.lastPlayer);
         m.put("canEdit", s.admin || Objects.equals(c.owner, s.uuid));
+        m.put("mine", Objects.equals(c.owner, s.uuid));
         List<Map<String, Object>> top = new ArrayList<>();
         c.totals().entrySet().stream()
                 .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
@@ -610,6 +657,14 @@ public final class Api {
         }
     }
 
+    /** Only the player who added a container may make it shared (admins included: they may only make it private). */
+    public boolean isOwner(AuthManager.Session s, String id) {
+        synchronized (store) {
+            StoredChest c = findChest(id);
+            return c != null && Objects.equals(c.owner, s.uuid);
+        }
+    }
+
     // ------------------------------------------------------------------ projects
     // Lock order: store first, then projects (the in-game code does the same).
 
@@ -629,7 +684,7 @@ public final class Api {
     }
 
     private ProjectProgress progress(Project p, AuthManager.Session s) {
-        return ProjectProgress.of(p, store.chestsLocked(), c -> visible(c, s), store.stackSizesLocked());
+        return ProjectProgress.of(p, store.chestsLocked(), c -> visibleAll(c, s), store.stackSizesLocked());
     }
 
     private Map<String, Object> projectSummary(Project p, AuthManager.Session s, ProjectProgress pr) {
@@ -720,7 +775,10 @@ public final class Api {
                 // Every container the player can see, to choose which ones to link.
                 java.util.Set<String> linkedIds = new HashSet<>(p.chests);
                 List<Map<String, Object>> candidates = new ArrayList<>();
-                for (StoredChest c : visibleChests(s)) {
+                for (StoredChest c : store.chestsLocked()) {
+                    if (!visibleAll(c, s)) {
+                        continue;
+                    }
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("id", c.id);
                     m.put("name", c.name);
@@ -754,13 +812,13 @@ public final class Api {
                 java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
                 for (String id : p.chests) {
                     StoredChest c = findChest(id);
-                    if (c != null && !visible(c, s)) {
+                    if (c != null && !visibleAll(c, s)) {
                         out.add(id);
                     }
                 }
                 for (String id : wanted) {
                     StoredChest c = findChest(id);
-                    if (c != null && visible(c, s)) {
+                    if (c != null && visibleAll(c, s)) {
                         out.add(id);
                     }
                 }
@@ -781,7 +839,7 @@ public final class Api {
                 long have = 0;
                 for (String cid : p.chests) {
                     StoredChest c = findChest(cid);
-                    if (c != null && visible(c, s)) {
+                    if (c != null && visibleAll(c, s)) {
                         have += c.totals().getOrDefault(itemId, 0L);
                     }
                 }

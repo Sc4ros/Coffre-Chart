@@ -31,7 +31,7 @@ import java.util.Set;
 /** /coffres and its sub-commands (French names, with a few aliases). */
 public final class CoffresCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUBS = List.of("ajouter", "web", "chercher", "liste", "projet", "nom", "zone", "prive", "public",
+    private static final List<String> SUBS = List.of("ajouter", "web", "chercher", "liste", "projet", "nom", "zone", "prive",
             "info", "retirer", "localiser", "deconnexion", "aide");
 
     private final CoffresPlugin plugin;
@@ -94,8 +94,16 @@ public final class CoffresCommand implements CommandExecutor, TabCompleter {
                 Msg.send(p, z.isBlank() ? "<green>✔</green> <gray>Zone retirée.</gray>"
                         : "<green>✔</green> <gray>Rangé dans la zone</gray> <white><zone></white>", Placeholder.unparsed("zone", DataStore.clean(z, 32)));
             }
-            case "prive", "privé", "private" -> visibility(p, false);
-            case "public" -> visibility(p, true);
+            case "prive", "privé", "private" -> {
+                if (isAll(rest)) {
+                    makeAllPrivate(p);
+                } else {
+                    makePrivate(p);
+                }
+            }
+            // Containers are never made visible from the game: only from their page on the site, on purpose.
+            case "public", "commun", "partager" -> Msg.send(p, "<gray>Pour rendre un coffre <white>commun</white>, ouvre sa page sur le site, "
+                    + "puis <white>Modifier → Coffre commun</white>.</gray> <click:run_command:'/coffres web'><aqua>[Ouvrir le site]</aqua></click>");
             case "info" -> info(p);
             case "retirer", "supprimer", "remove" -> {
                 StoredChest c = target(p, false);
@@ -137,7 +145,8 @@ public final class CoffresCommand implements CommandExecutor, TabCompleter {
                 {"/coffres projet lier <projet>", "clic droit sur des coffres pour les lier au projet"},
                 {"/coffres nom <nom>", "renommer le coffre que tu regardes"},
                 {"/coffres zone <zone>", "ranger le coffre dans une zone (Base, Ferme…)"},
-                {"/coffres prive | public", "qui le voit sur le site"},
+                {"/coffres prive", "remettre en privé le coffre commun que tu regardes"},
+                {"/coffres prive tout", "remettre tous tes coffres en privé d'un coup"},
                 {"/coffres info", "infos sur le coffre que tu regardes"},
                 {"/coffres retirer", "ne plus suivre le coffre que tu regardes"},
                 {"/coffres deconnexion", "te déconnecter du site partout"},
@@ -175,14 +184,46 @@ public final class CoffresCommand implements CommandExecutor, TabCompleter {
         return c;
     }
 
-    private void visibility(Player p, boolean pub) {
+    private void makePrivate(Player p) {
         StoredChest c = target(p, true);
         if (c == null) {
             return;
         }
-        plugin.store().edit(c.id, null, null, pub);
-        Msg.send(p, pub ? "<green>✔</green> <white><name></white> <gray>est visible par tout le serveur sur le site.</gray>"
-                : "<green>✔</green> <white><name></white> <gray>est privé : seuls toi et les admins le voient.</gray>", Placeholder.unparsed("name", c.name));
+        if (!c.pub) {
+            Msg.send(p, "<gray><name> est déjà privé : seuls toi et les admins le voient.</gray>", Placeholder.unparsed("name", c.name));
+            return;
+        }
+        plugin.store().edit(c.id, null, null, false);
+        Msg.send(p, "<green>✔</green> <white><name></white> <gray>n'est plus commun : seuls toi et les admins le voient.</gray>", Placeholder.unparsed("name", c.name));
+    }
+
+    private static boolean isAll(String rest) {
+        String r = rest.trim().toLowerCase(Locale.ROOT);
+        return r.equals("tout") || r.equals("tous") || r.equals("all");
+    }
+
+    /** /coffres prive tout: every container the player added stops being shared. */
+    private void makeAllPrivate(Player p) {
+        String me = p.getUniqueId().toString();
+        int changed = 0;
+        int total = 0;
+        for (StoredChest c : plugin.store().all()) {
+            if (!me.equals(c.owner)) {
+                continue;
+            }
+            total++;
+            if (c.pub) {
+                plugin.store().edit(c.id, null, null, false);
+                changed++;
+            }
+        }
+        if (total == 0) {
+            Msg.send(p, "<gray>Tu n'as encore ajouté aucun coffre.</gray>");
+        } else if (changed == 0) {
+            Msg.send(p, "<gray>Tous tes coffres sont déjà privés.</gray>");
+        } else {
+            Msg.send(p, "<green>✔</green> <gray>" + changed + " coffre(s) remis en privé : seuls toi et les admins les voient.</gray>");
+        }
     }
 
     private void info(Player p) {
@@ -192,7 +233,7 @@ public final class CoffresCommand implements CommandExecutor, TabCompleter {
             Msg.send(p, "<yellow>Regarde un coffre suivi.</yellow>");
             return;
         }
-        Msg.send(p, "<white><b><name></b></white>" + (c.pub ? "" : " <gold>🔒</gold>"), Placeholder.unparsed("name", c.name));
+        Msg.send(p, "<white><b><name></b></white>" + (c.pub ? " <light_purple>· commun</light_purple>" : " <gold>🔒 privé</gold>"), Placeholder.unparsed("name", c.name));
         Msg.raw(p, "  <gray>Zone :</gray> <white><zone></white> <dark_gray>·</dark_gray> <gray>ajouté par</gray> <white><owner></white>",
                 Placeholder.unparsed("zone", c.zone == null ? "aucune" : c.zone),
                 Placeholder.unparsed("owner", c.ownerName == null ? "?" : c.ownerName));
@@ -326,6 +367,9 @@ public final class CoffresCommand implements CommandExecutor, TabCompleter {
                 return plugin.projectsGame().names(p, args[2]);
             }
             return List.of();
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("prive")) {
+            return "tout".startsWith(args[1].toLowerCase(Locale.ROOT)) ? List.of("tout") : List.of();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("zone")) {
             Set<String> zones = new LinkedHashSet<>();

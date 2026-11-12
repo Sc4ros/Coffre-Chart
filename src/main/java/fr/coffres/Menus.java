@@ -299,7 +299,10 @@ public final class Menus implements Listener {
 
     public void openList(Player p, int page) {
         List<StoredChest> list = visibleChests(p);
-        list.sort(Comparator.comparing((StoredChest c) -> c.zone == null ? "~" : c.zone.toLowerCase())
+        String me = p.getUniqueId().toString();
+        // the player's own containers first, then the shared ones (and, for admins, everyone else's)
+        list.sort(Comparator.comparing((StoredChest c) -> me.equals(c.owner) ? 0 : c.pub ? 1 : 2)
+                .thenComparing(c -> c.zone == null ? "~" : c.zone.toLowerCase())
                 .thenComparing(c -> c.name.toLowerCase()));
         int pages = Math.max(1, (list.size() + PER_PAGE - 1) / PER_PAGE);
         int pg = Math.max(0, Math.min(page, pages - 1));
@@ -347,8 +350,11 @@ public final class Menus implements Listener {
         }
         lore.add(line("<gray>" + c.x + " " + c.y + " " + c.z + " · " + Containers.dimensionName(c.dim) + "</gray>"));
         lore.add(line("<gray>" + Msg.number(c.itemCount()) + " objets · " + c.slots.size() + "/" + c.size + " cases</gray>"));
-        if (!c.pub) {
-            lore.add(line("<gold>🔒 Privé</gold>"));
+        boolean mine = p.getUniqueId().toString().equals(c.owner);
+        if (c.pub) {
+            lore.add(line("<light_purple>Coffre commun</light_purple>" + (mine ? "" : " <gray>· à " + esc(c.ownerName == null ? "?" : c.ownerName) + "</gray>")));
+        } else {
+            lore.add(line("<gold>🔒 Privé</gold>" + (mine ? "" : " <gray>· à " + esc(c.ownerName == null ? "?" : c.ownerName) + "</gray>")));
         }
         c.totals().entrySet().stream()
                 .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))

@@ -1,9 +1,9 @@
 // Inventaire (every item), one item's page, and the search screen.
 import { h, icon, fmt, compact, plural, store, debounce, norm, stacks, avatar, ago, where, time, weekday, dayShort } from '../util.js';
-import { api, session } from '../api.js';
+import { api, session, currentView } from '../api.js';
 import { itemIcon, itemName, initAssets } from '../icons.js';
 import { timeChart, segBar, table, progressBar, SERIES, OTHER } from '../charts.js';
-import { header, card, chartCard, segmented, feed, empty, skeleton, errorBox, itemRow, placeText, distanceBadge, locateButton } from '../ui.js';
+import { header, card, chartCard, segmented, feed, empty, skeleton, errorBox, itemRow, placeText, distanceBadge, locateButton, viewEmpty } from '../ui.js';
 
 function matches(it, q) {
   if (!q) return 0;
@@ -24,7 +24,7 @@ export function inventoryPage(root, _params, query) {
   let items = null;
   let alive = true;
   const sub = h('div.sub', ' ');
-  const head = header('Inventaire');
+  const head = header('Inventaire', { view: () => { items = null; body.replaceChildren(skeleton(2)); load(); } });
   head.querySelector('.t').appendChild(sub);
   const input = h('input', { type: 'search', placeholder: 'Filtrer (ex. bois, minerai…)', value: q, 'aria-label': 'Filtrer les objets', autocomplete: 'off', enterkeyhint: 'search' });
   const body = h('div', skeleton(2));
@@ -55,7 +55,7 @@ export function inventoryPage(root, _params, query) {
     if (sort === 'a') list.sort((a, b) => itemName(a.id).localeCompare(itemName(b.id), 'fr'));
     else if (sort === 'c') list.sort((a, b) => b.c - a.c || b.n - a.n);
     if (!items.length) {
-      body.replaceChildren(card(null, empty('🫙', 'Rien à compter', 'Ajoute des coffres en jeu avec /coffres, leurs objets apparaîtront ici.')));
+      body.replaceChildren(card(null, viewEmpty(currentView())));
       return;
     }
     if (!list.length) {
@@ -182,7 +182,7 @@ export function searchPage(root, _params, query) {
   let alive = true;
   const input = h('input', { type: 'search', placeholder: 'Diamant, bûche, « Minerais »…', 'aria-label': 'Chercher', autocomplete: 'off', enterkeyhint: 'search', value: query.get('q') || '' });
   const results = h('div', skeleton(1));
-  root.append(header('Chercher', { sub: 'Trouve un objet et le coffre où il est rangé.' }),
+  root.append(header('Chercher', { sub: 'Trouve un objet et le coffre où il est rangé.', view: () => { items = null; chests = null; load(); } }),
     h('label.searchbox.big', icon('search'), input), results);
   setTimeout(() => input.focus(), 50);
   input.addEventListener('input', debounce(draw, 80));
