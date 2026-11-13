@@ -8,7 +8,14 @@
 <p align="center">
   <b>Tout ce qu'il y a dans tes coffres, partout.</b><br>
   Plugin Minecraft Paper qui compte le contenu des coffres du serveur<br>
-  et l'affiche sur un site pour téléphone et PC, installable sur l'iPhone comme une appli.
+  et l'affiche sur un site pour téléphone et PC, installable sur l'iPhone comme une appli.<br><br>
+  📦 <a href="https://modrinth.com/plugin/coffre-chart"><b>Disponible sur Modrinth</b></a>
+</p>
+
+<p align="center">
+  <a href="https://modrinth.com/plugin/coffre-chart"><img alt="Télécharger sur Modrinth" src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger%20sur-Modrinth-1BD96A?logo=modrinth&logoColor=white"></a>
+  <a href="https://modrinth.com/plugin/coffre-chart"><img alt="Téléchargements" src="https://img.shields.io/modrinth/dt/coffre-chart?logo=modrinth&label=t%C3%A9l%C3%A9chargements&color=1BD96A"></a>
+  <a href="https://modrinth.com/plugin/coffre-chart/versions"><img alt="Version" src="https://img.shields.io/modrinth/v/coffre-chart?label=version&color=1BD96A"></a>
 </p>
 
 <p align="center">
@@ -135,9 +142,11 @@ Pour essayer : [`docs/exemples/`](docs/exemples/) contient une petite maison en 
 
 ## Installation
 
-**Prérequis :** un serveur **Paper 26.2** (ou plus récent) qui tourne avec **Java 25**.
+**Prérequis :** un serveur **Paper** ou **Purpur 26.2** (ou plus récent) qui tourne avec **Java 25**.
+Spigot, Bukkit et Folia ne sont pas pris en charge.
 
-1. Télécharge `Coffres-1.2.1.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
+1. Télécharge la dernière version sur **[Modrinth](https://modrinth.com/plugin/coffre-chart/versions)**
+   (ou `Coffres-1.2.1.jar` dans le dossier [`release/`](release/) et l'onglet **Releases** de GitHub).
 2. Mets-le dans le dossier `plugins/` du serveur et démarre le serveur.
 3. **Ouvre le port du site (8125 par défaut).** C'est un port en plus de celui de Minecraft :
    - serveur chez toi : redirige le port **TCP 8125** de ta box vers la machine du serveur ;
