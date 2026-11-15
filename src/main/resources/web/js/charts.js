@@ -306,10 +306,38 @@ export function ring(ratio, { size = 120, stroke = 12, label, color } = {}) {
   return h('div.ring', svg);
 }
 
-/** Thin progress bar for one material. */
-export function progressBar(have, need) {
-  const v = need ? Math.min(1, have / need) : 1;
-  return h('div', { class: v >= 1 ? 'pbar done' : 'pbar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': need, 'aria-valuenow': Math.min(have, need) },
+/**
+ * Ring with two parts: what is already placed in the world (green) and what is in the chests (blue).
+ * The number in the middle is the total.
+ */
+export function ring2(placed, chests, { size = 120, stroke = 12, label } = {}) {
+  const r = (100 - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const a = Math.max(0, Math.min(1, placed || 0));
+  const b = Math.max(0, Math.min(1 - a, chests || 0));
+  const total = a + b;
+  const pctText = Math.floor(total * 100 + 1e-9) + ' %';
+  const arc = (from, len, col) => (len > 0 ? s('circle', {
+    cx: 50, cy: 50, r, transform: `rotate(${-90 + from * 360} 50 50)`,
+    style: `fill:none;stroke:${col};stroke-width:${stroke};stroke-dasharray:${(c * len).toFixed(2)} ${c.toFixed(2)}`,
+  }) : null);
+  const svg = s('svg', { viewBox: '0 0 100 100', width: size, height: size, role: 'img',
+    'aria-label': `${label ? label + ' : ' : ''}${pctText}, dont ${Math.floor(a * 100 + 1e-9)} % posé` },
+  s('circle', { cx: 50, cy: 50, r, style: `fill:none;stroke:var(--fill-2);stroke-width:${stroke}` }),
+  arc(a, b, 'var(--accent)'),
+  arc(0, a, 'var(--good)'),
+  s('text', { x: 50, y: label ? 52 : 57, 'text-anchor': 'middle', class: 'ring-v' }, pctText),
+  label ? s('text', { x: 50, y: 67, 'text-anchor': 'middle', class: 'ring-l' }, label) : null);
+  return h('div.ring', svg);
+}
+
+/** Thin progress bar for one material: placed in the world (green), then in the chests (blue). */
+export function progressBar(have, need, placed = 0) {
+  const p = need ? Math.min(1, placed / need) : 0;
+  const v = need ? Math.min(1 - p, have / need) : 1;
+  const done = p + v >= 1 - 1e-9;
+  return h('div', { class: done ? 'pbar done' : 'pbar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': need, 'aria-valuenow': Math.min(placed + have, need) },
+    p > 0 ? h('i.pl', { style: { width: `${p * 100}%` } }) : null,
     h('i', { style: { width: `${v * 100}%` } }));
 }
 

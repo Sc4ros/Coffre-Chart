@@ -1,9 +1,9 @@
 // Projets: send a building plan (.litematic, .schem, .schematic, .nbt), see every block it needs,
 // link the chests where the materials are stored and follow the progress.
-import { h, icon, fmt, compact, plural, store, debounce, norm, ago, toast, sheet, stacks } from '../util.js';
+import { h, icon, fmt, compact, plural, store, debounce, norm, ago, toast, sheet, stacks, dimName } from '../util.js';
 import { api, session } from '../api.js';
 import { itemIcon, itemName, initAssets } from '../icons.js';
-import { wheel, ring, progressBar, table, SERIES, OTHER } from '../charts.js';
+import { wheel, ring, ring2, progressBar, table, SERIES, OTHER } from '../charts.js';
 import { header, card, chartCard, segmented, empty, skeleton, errorBox, placeText, locateButton } from '../ui.js';
 import { typeName } from './chests.js';
 
@@ -37,7 +37,24 @@ function shulkerText(n) {
   return `≈ ${n.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} shulker${n >= 2 ? 's' : ''}`;
 }
 
-function missingOf(l) { return Math.max(0, l.need - l.have); }
+/** Still to find once what is placed and what is in the linked chests are counted. */
+function missingOf(l) { return Math.max(0, l.need - (l.placed || 0) - l.have); }
+/** What the chests bring (items beyond what is still to place do not count). */
+function usefulOf(l) { return Math.max(0, Math.min(l.have, l.need - (l.placed || 0))); }
+
+const ROTATIONS = [[0, '0°'], [90, '90° ↻'], [180, '180°'], [270, '90° ↺']];
+const MIRRORS = [['none', 'Aucun'], ['lr', 'Gauche-droite'], ['fb', 'Avant-arrière']];
+
+function rotText(at) {
+  const r = { 0: 'aucune', 90: '90° horaire', 180: '180°', 270: '90° anti-horaire' }[at.rot] || 'aucune';
+  const m = { lr: ' · miroir gauche-droite', fb: ' · miroir avant-arrière' }[at.mirror] || '';
+  return r + m;
+}
+
+/** The ring of a project: two colours when it is placed in the world. */
+function projectRing(p, opts) {
+  return p.inWorld ? ring2(p.placedRatio, p.ratio - p.placedRatio, opts) : ring(p.ratio, opts);
+}
 
 // ───────── new project / replace the file ─────────
 
@@ -124,14 +141,16 @@ export function uploadSheet({ project, onDone } = {}) {
 function projectCard(p) {
   return h('a.card.project-card', { href: '#/projet/' + p.id },
     h('div.top',
-      ring(p.ratio, { size: 66, stroke: 11 }),
+      projectRing(p, { size: 66, stroke: 11 }),
       h('div', { style: { minWidth: 0, flex: 1 } },
         h('div.nm', p.name),
         h('div.co', ownerText(p)),
-        h('div.co', `${fmt(p.have)} / ${fmt(p.need)} blocs · ${p.chests ? plural(p.chests, 'coffre lié', 'coffres liés') : 'aucun coffre lié'}`))),
+        h('div.co', p.inWorld
+          ? `${p.placedPercent} % posé · ${p.chestPercent} % dans les coffres`
+          : `${fmt(p.have)} / ${fmt(p.need)} blocs · ${p.chests ? plural(p.chests, 'coffre lié', 'coffres liés') : 'aucun coffre lié'}`))),
     p.top.length
       ? h('div.mini', h('span.lbl', 'Manque'), p.top.map((t) => h('span', { title: itemName(t.id) }, itemIcon(t.id, 's'), compact(t.n))))
-      : h('div.mini.done', icon('check'), 'Tous les blocs sont dans les coffres'),
+      : h('div.mini.done', icon('check'), p.placed >= p.need ? 'Construction terminée' : 'Tous les blocs sont réunis'),
     h('div.foot', [p.file, sizeText(p), `modifié ${ago(p.updated)}`].filter(Boolean).join(' · ')));
 }
 
@@ -194,21 +213,26 @@ function materialRow(l) {
   const done = miss === 0;
   const st = stacks(miss, l.st);
   const avail = Math.min(miss, l.elsewhere);
+  const placed = l.placed || 0;
+  const got = placed + usefulOf(l);
+  const counts = placed
+    ? `${fmt(placed)} posé${placed > 1 ? 's' : ''} + ${fmt(l.have)} en coffre / ${fmt(l.need)}`
+    : `${fmt(l.have)} / ${fmt(l.need)}`;
   return h('a.row.mat', { href: '#/objet/' + l.id },
     h('div.ic-box', itemIcon(l.id)),
     h('div.main-col',
       h('div.title', itemName(l.id)),
-      h('div.meta', `${fmt(l.have)} / ${fmt(l.need)}${done ? '' : ` · manque ${fmt(miss)}${st ? ` (${st})` : ''}`}`),
-      progressBar(l.have, l.need)),
+      h('div.meta', `${counts}${done ? '' : ` · manque ${fmt(miss)}${st ? ` (${st})` : ''}`}`),
+      progressBar(usefulOf(l), l.need, placed)),
     h('div.end',
-      done ? h('span.ok-pill', icon('check'), 'OK') : h('div.v', `${Math.floor((l.have / l.need) * 100)} %`),
+      done ? h('span.ok-pill', icon('check'), placed >= l.need ? 'Posé' : 'OK') : h('div.v', `${Math.floor((got / l.need) * 100)} %`),
       !done && avail > 0 ? h('div.s.avail', { title: 'Dans d\'autres coffres, pas liés au projet' }, `${compact(avail)} ailleurs`) : null),
     icon('chev', 'chev'));
 }
 
 function shoppingSheet(p) {
   const lines = p.materials.filter((l) => missingOf(l) > 0).sort((a, b) => missingOf(b) - missingOf(a));
-  const text = [`Projet « ${p.name} » — il manque ${fmt(p.missing)} blocs`, '']
+  const text = [`Projet « ${p.name} » — il manque ${fmt(p.missing)} blocs${p.inWorld ? ` (${p.placedPercent} % déjà posé)` : ''}`, '']
     .concat(lines.map((l) => {
       const miss = missingOf(l);
       const st = stacks(miss, l.st);
@@ -216,7 +240,7 @@ function shoppingSheet(p) {
     })).join('\n');
   sheet('Ce qu\'il manque', (close) => {
     const ta = h('textarea.shop', { readonly: true, 'aria-label': 'Liste des blocs manquants' });
-    ta.value = lines.length ? text : 'Il ne manque rien : tous les blocs sont dans les coffres liés.';
+    ta.value = lines.length ? text : 'Il ne manque rien : tous les blocs sont posés ou dans les coffres liés.';
     const copy = h('button.btn', { type: 'button' }, icon('copy'), 'Copier');
     copy.addEventListener('click', async () => {
       let ok = false;
@@ -372,7 +396,9 @@ export function projectPage(root, [id]) {
   const headBox = h('div');
   const actionsBox = h('div.actions.proj-actions');
   const heroBox = h('div');
+  const worldBox = h('div');
   const chartBox = h('div');
+  let poll = null;
   const chestsBox = h('div');
   const matsList = h('div.list');
   const matsCount = h('span.pill');
@@ -409,7 +435,7 @@ export function projectPage(root, [id]) {
     document.title = `${p.name} · Coffres`;
     if (!built) {
       built = true;
-      body.replaceChildren(headBox, actionsBox, h('div.grid.two', h('div.wide', heroBox), h('div.wide', chartBox), matsCard, h('div.wide', chestsBox)));
+      body.replaceChildren(headBox, actionsBox, h('div.grid.two', h('div.wide', heroBox), h('div.wide', worldBox), h('div.wide', chartBox), matsCard, h('div.wide', chestsBox)));
     }
 
     headBox.replaceChildren(h('div.head',
@@ -431,14 +457,21 @@ export function projectPage(root, [id]) {
     const availElsewhere = miss.reduce((a, l) => a + Math.min(missingOf(l), l.elsewhere), 0);
     const needSh = shulkerText(shulkers(p.materials, (l) => l.need));
     const missSh = shulkerText(shulkers(miss, missingOf));
+    const finished = p.inWorld && p.placed >= p.need;
     heroBox.replaceChildren(card(null, h('div',
       h('div.proj-hero',
-        ring(p.ratio, { size: 136, stroke: 11, label: p.percent >= 100 ? 'prêt !' : 'réunis' }),
+        p.inWorld
+          ? h('div.proj-ring',
+            ring2(p.placedRatio, p.ratio - p.placedRatio, { size: 136, stroke: 11, label: finished ? 'construit !' : p.percent >= 100 ? 'prêt !' : 'réunis' }),
+            h('div.legend3', h('span', h('i.pl'), 'Posé'), h('span', h('i.ch'), 'Coffres'), h('span', h('i'), 'Manque')))
+          : ring(p.ratio, { size: 136, stroke: 11, label: p.percent >= 100 ? 'prêt !' : 'réunis' }),
         h('div.tiles',
           tile('Il faut', fmt(p.need), needSh || plural(p.kinds, 'sorte de bloc', 'sortes de blocs')),
-          tile('Dans les coffres', fmt(p.have), p.chests ? plural(p.chests, 'coffre lié', 'coffres liés') : 'aucun coffre lié'),
+          p.inWorld ? tile('Déjà posés', fmt(p.placed), `${p.placedPercent} % du plan`, 'placed') : null,
+          tile('Dans les coffres', fmt(p.have), p.inWorld ? `${p.chestPercent} % · ${p.chests ? plural(p.chests, 'coffre lié', 'coffres liés') : 'aucun coffre lié'}`
+            : p.chests ? plural(p.chests, 'coffre lié', 'coffres liés') : 'aucun coffre lié'),
           tile('Manquants', fmt(p.missing), p.missing ? (availElsewhere ? `dont ${compact(availElsewhere)} ailleurs` : missSh) : 'rien !', p.missing ? '' : 'good'),
-          tile('Sortes complètes', `${fmt(p.doneKinds)} / ${fmt(p.kinds)}`, null, p.doneKinds === p.kinds ? 'good' : ''))),
+          p.inWorld ? null : tile('Sortes complètes', `${fmt(p.doneKinds)} / ${fmt(p.kinds)}`, null, p.doneKinds === p.kinds ? 'good' : ''))),
       p.chests === 0 && p.canLink ? h('p.note.hint', icon('link'), 'Lie les coffres où tu ranges les matériaux : leur contenu sera compté automatiquement, en direct.') : null,
       availElsewhere > 0 && p.chests > 0 ? h('p.note.hint', `${compact(availElsewhere)} blocs qui manquent sont déjà dans d'autres coffres du serveur : regarde « ailleurs » dans la liste, ou lie ces coffres au projet.`) : null,
       p.hiddenChests ? h('p.note.hint', icon('lock'), `${plural(p.hiddenChests, 'coffre privé lié', 'coffres privés liés')} par d'autres joueurs ${p.hiddenChests > 1 ? 'ne sont pas comptés' : 'n\'est pas compté'} pour toi.`) : null)));
@@ -451,7 +484,12 @@ export function projectPage(root, [id]) {
     if (restN) wheelData.push({ id: '_other', value: restN, label: `Autres (${rest.length} sortes)`, color: OTHER });
     chartBox.replaceChildren(chartCard('Matériaux',
       () => wheel(wheelData, { centerLabel: 'blocs' }),
-      () => table(['Bloc', 'Il faut', 'Coffres', 'Manque'], p.materials.map((l) => [itemName(l.id), fmt(l.need), fmt(l.have), fmt(missingOf(l))]))));
+      () => table(p.inWorld ? ['Bloc', 'Il faut', 'Posés', 'Coffres', 'Manque'] : ['Bloc', 'Il faut', 'Coffres', 'Manque'],
+        p.materials.map((l) => (p.inWorld
+          ? [itemName(l.id), fmt(l.need), fmt(l.placed || 0), fmt(l.have), fmt(missingOf(l))]
+          : [itemName(l.id), fmt(l.need), fmt(l.have), fmt(missingOf(l))])))));
+
+    drawWorld(p);
 
     // Linked chests
     chestsBox.replaceChildren(card('Coffres liés', p.linked.length
@@ -466,6 +504,54 @@ export function projectPage(root, [id]) {
     { cls: 'flush', tools: p.canLink && p.linked.length ? h('button.link-btn', { type: 'button', onclick: () => linkSheet(p, set) }, 'Modifier') : null }));
 
     drawMaterials();
+  }
+
+  // The "Dans le monde" card: where the plan is built and which blocks are already placed.
+  function drawWorld(p) {
+    clearTimeout(poll);
+    const b = p.build;
+    if (b && b.scanning && alive) poll = setTimeout(load, 1500);
+    let content;
+    if (!p.checkable) {
+      content = h('div.world-box',
+        h('p.note', p.planNote),
+        p.canEdit ? h('button.btn.soft.sm', { type: 'button', style: { marginTop: '10px' }, onclick: () => uploadSheet({ project: p, onDone: set }) },
+          icon('upload'), 'Remplacer le fichier') : null);
+    } else if (!p.placement) {
+      content = h('div.world-box',
+        h('p.note', 'Dis où la construction se trouve dans le monde : Coffres regarde quels blocs du plan sont déjà posés, '
+          + 'en direct, et ne les demande plus dans les coffres.'),
+        p.canEdit
+          ? h('button.btn.sm', { type: 'button', style: { marginTop: '12px' }, onclick: () => placementSheet(p, set) }, icon('pin'), 'Placer dans le monde')
+          : h('p.note', { style: { marginTop: '8px' } }, 'Seul le créateur du projet (ou un admin) peut le placer.'));
+    } else {
+      const at = p.placement;
+      const facts = h('div.world-facts',
+        tile('Monde', dimName(/_nether$/.test(at.world) ? 'nether' : /_the_end$/.test(at.world) ? 'end' : 'overworld'), at.world),
+        tile('Origine', `${at.x} ${at.y} ${at.z}`, 'x y z'),
+        tile('Rotation', rotText(at).split(' · ')[0], at.mirror && at.mirror !== 'none' ? rotText(at).split(' · ')[1] : 'sans miroir'),
+        tile('Blocs posés', b ? `${fmt(b.placedBlocks)} / ${fmt(b.blocks)}` : '—', b ? `${Math.floor((b.placedBlocks / Math.max(1, b.blocks)) * 100)} % des blocs` : null, 'placed'));
+      let status;
+      if (!b) status = h('p.note.hint', 'Le plan de ce projet n\'a pas pu être chargé. Renvoie son fichier.');
+      else if (b.scanning) {
+        status = h('div.scan-line', h('span', 'Vérification…'), progressBar(Math.round(b.progress * 1000), 1000), h('span', `${Math.floor(b.progress * 100)} %`));
+      } else {
+        status = h('div.scan-line', icon('check'), h('span', b.lastScan ? `Vérifié ${ago(b.lastScan)}, puis suivi en direct` : 'En attente de vérification'));
+      }
+      content = h('div.world-box',
+        facts,
+        status,
+        b && !b.scanning && b.unloaded > 0 ? h('p.note.hint', icon('pin'),
+          `${plural(b.unloaded, 'bloc n\'a', 'blocs n\'ont')} pas pu être vérifié${b.unloaded > 1 ? 's' : ''} : personne n'était près de cette partie de la construction. `
+          + 'Approche-toi en jeu, puis appuie sur « Revérifier ».') : null,
+        h('div.world-actions',
+          p.canLink && b ? h('button.btn.soft.sm', { type: 'button', disabled: b.scanning, onclick: async (e) => {
+            e.currentTarget.disabled = true;
+            try { set(await api(`project/${p.id}/scan`, { method: 'POST' })); toast('Vérification lancée'); } catch (err) { toast(err.message, true); }
+          } }, icon('bolt'), 'Revérifier') : null,
+          p.canEdit ? h('button.btn.plain.sm', { type: 'button', onclick: () => placementSheet(p, set) }, icon('pin'), 'Déplacer') : null));
+    }
+    worldBox.replaceChildren(card('Dans le monde', content, { cls: 'flush' }));
   }
 
   function drawMaterials() {
@@ -483,7 +569,7 @@ export function projectPage(root, [id]) {
     matsCount.textContent = plural(list.length, 'sorte', 'sortes');
     if (!list.length) {
       const msg = nq ? `Aucun bloc ne correspond à « ${search.value} ».`
-        : filter === 'missing' ? '🎉 Il ne manque rien : tous les blocs sont dans les coffres liés !'
+        : filter === 'missing' ? '🎉 Il ne manque rien : tous les blocs sont posés ou dans les coffres liés !'
           : filter === 'done' ? 'Aucune sorte de bloc n\'est encore complète.' : 'Aucun bloc.';
       matsList.replaceChildren(h('p.note', { style: { padding: '6px 16px 14px' } }, msg));
       return;
@@ -497,7 +583,90 @@ export function projectPage(root, [id]) {
   }
 
   load();
-  return { refresh: load, destroy() { alive = false; } };
+  return { refresh: load, destroy() { alive = false; clearTimeout(poll); } };
+}
+
+// ───────── placing a project in the world ─────────
+
+function placementSheet(p, onSaved) {
+  sheet(p.placement ? 'Déplacer le projet' : 'Placer dans le monde', (close) => {
+    const at = p.placement || {};
+    let rot = at.rot || 0;
+    let mirror = at.mirror || 'none';
+    const worlds = p.worlds && p.worlds.length ? p.worlds : ['world'];
+    const world = h('select.input', { 'aria-label': 'Monde' }, worlds.map((w) => h('option', { value: w }, w)));
+    world.value = at.world && worlds.includes(at.world) ? at.world : worlds[0];
+    const num = (v, label) => h('input.input', { type: 'number', inputmode: 'numeric', step: 1, value: v ?? '', 'aria-label': label, required: true });
+    const x = num(at.x, 'x');
+    const y = num(at.y, 'y');
+    const z = num(at.z, 'z');
+    const err = h('p.err', { hidden: true });
+    const save = h('button.btn', { type: 'submit' }, 'Enregistrer');
+    const here = h('button.btn.soft.block', { type: 'button' }, icon('pin'), 'Utiliser ma position en jeu');
+
+    async function send(body, btn) {
+      btn.disabled = true;
+      err.hidden = true;
+      try {
+        const updated = await api(`project/${p.id}/placement`, { method: 'POST', body: { ...body, rot, mirror } });
+        close();
+        toast('Projet placé : vérification des blocs posés…');
+        onSaved(updated);
+      } catch (e) {
+        err.textContent = e.message;
+        err.hidden = false;
+        btn.disabled = false;
+      }
+    }
+    here.addEventListener('click', () => send({ here: true }, here));
+
+    const remove = p.placement ? h('button.btn.danger.block', { type: 'button', style: { marginTop: '10px' } }, icon('trash'), 'Retirer du monde') : null;
+    if (remove) {
+      remove.addEventListener('click', async () => {
+        if (!confirm('Ne plus suivre les blocs posés pour ce projet ? Seuls les coffres compteront.')) return;
+        remove.disabled = true;
+        try {
+          const updated = await api(`project/${p.id}/placement`, { method: 'POST', body: { remove: true } });
+          close();
+          toast('Le projet n\'est plus placé dans le monde');
+          onSaved(updated);
+        } catch (e) {
+          toast(e.message, true);
+          remove.disabled = false;
+        }
+      });
+    }
+
+    const form = h('form',
+      h('details.place-help',
+        h('summary', 'Quelles coordonnées mettre ?'),
+        h('p.note', p.format === 'litematic'
+          ? 'Litematica : ouvre le menu de placement du schéma et recopie les coordonnées de l\'origine, ainsi que la même rotation et le même miroir.'
+          : 'Le coin de la construction qui a les plus petits x, y et z (le coin du bas, côté nord-ouest), quand elle n\'est pas tournée.'),
+        h('p.note', 'Le plus simple : tiens-toi en jeu sur ce bloc, puis appuie sur « Utiliser ma position en jeu ». '
+          + 'Tu peux aussi taper /coffres projet placer ' + p.name + ' en jeu.')),
+      h('div.field', h('span', 'Rotation'), segmented(ROTATIONS, rot, (v) => { rot = v; }, 'Rotation')),
+      h('div.field', h('span', 'Miroir'), segmented(MIRRORS, mirror, (v) => { mirror = v; }, 'Miroir')),
+      here,
+      h('div.or-line', 'ou'),
+      h('label.field', h('span', 'Monde'), world),
+      h('div.field', h('span', 'Origine'), h('div.coords',
+        h('label', h('span', 'X'), x), h('label', h('span', 'Y'), y), h('label', h('span', 'Z'), z))),
+      err,
+      remove,
+      h('div.btns', { style: { marginTop: '16px' } }, h('button.btn.plain', { type: 'button', onclick: () => close() }, 'Annuler'), save));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const vals = [x, y, z].map((i) => Number(i.value));
+      if ([x, y, z].some((i) => i.value.trim() === '') || vals.some((v) => !Number.isInteger(v))) {
+        err.textContent = 'Indique les coordonnées x, y et z (des nombres entiers), ou utilise ta position en jeu.';
+        err.hidden = false;
+        return;
+      }
+      send({ world: world.value, x: vals[0], y: vals[1], z: vals[2] }, save);
+    });
+    return form;
+  });
 }
 
 /** Projects strip for the home page. */
@@ -508,9 +677,10 @@ export function projectsHomeCard(projects) {
       newProjectButton('btn soft sm')), { cls: 'wide' });
   }
   return card('Projets', h('div.home-proj', projects.map((p) => h('a.hp', { href: '#/projet/' + p.id },
-    ring(p.ratio, { size: 52, stroke: 12 }),
+    projectRing(p, { size: 52, stroke: 12 }),
     h('div', { style: { minWidth: 0 } },
       h('div.nm', p.name),
-      h('div.meta', p.missing ? `manque ${compact(p.missing)} blocs` : 'tous les blocs sont prêts'))))),
+      h('div.meta', p.inWorld && p.placed >= p.need ? 'construction terminée'
+        : p.missing ? `manque ${compact(p.missing)} blocs${p.inWorld ? ` · ${p.placedPercent} % posé` : ''}` : 'tous les blocs sont prêts'))))),
   { cls: 'wide', more: { href: '#/projets', label: 'Tous les projets' } });
 }

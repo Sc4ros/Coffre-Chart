@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
+import fr.coffres.model.Placement;
 import fr.coffres.model.Project;
 import fr.coffres.project.SchematicReader;
 
@@ -194,7 +195,24 @@ public final class ProjectStore {
         p.sz = s.sizeZ();
         p.blocks = s.blocks();
         p.materials = new LinkedHashMap<>(s.materials());
+        p.planBlocks = s.plan() == null ? 0 : s.plan().size();
+        p.planNote = s.plan() == null ? s.planNote() : null;
         p.updated = System.currentTimeMillis();
+    }
+
+    /** Places the plan in the world (or removes the placement when {@code at} is null). */
+    public boolean setPlacement(String id, Placement at) {
+        synchronized (this) {
+            Project p = projects.get(id);
+            if (p == null) {
+                return false;
+            }
+            p.placement = at;
+            p.updated = System.currentTimeMillis();
+            dirty = true;
+        }
+        onChange.run();
+        return true;
     }
 
     /** Edits name / sharing. Null arguments are left unchanged. */

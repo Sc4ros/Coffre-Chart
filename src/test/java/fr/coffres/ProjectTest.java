@@ -368,7 +368,7 @@ class ProjectTest {
     void projectsAreSavedAndLoaded() throws IOException {
         ProjectStore projects = new ProjectStore(dir.resolve("projects.json"), LOG, null);
         SchematicReader.Schematic plan = new SchematicReader.Schematic("schem", "Pont", null, 10, 4, 3, 74,
-                new LinkedHashMap<>(Map.of("oak_planks", 64L, "lantern", 10L)));
+                new LinkedHashMap<>(Map.of("oak_planks", 64L, "lantern", 10L)), null, null);
         Project p = projects.create("Pont du village", OWNER.toString(), "Owner", false, "pont.schem", plan);
         assertTrue(projects.toggleChest(p.id, "aaaa1111"));
         assertTrue(projects.toggleChest(p.id, "bbbb2222"));

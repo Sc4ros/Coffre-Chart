@@ -1,8 +1,12 @@
 package fr.coffres;
 
+import fr.coffres.game.BuildScanner;
 import fr.coffres.game.BukkitBridge;
 import fr.coffres.game.Locator;
+import fr.coffres.model.Project;
+import fr.coffres.project.Build;
 import fr.coffres.store.DataStore;
+import fr.coffres.store.PlanStore;
 import fr.coffres.store.ProjectStore;
 import fr.coffres.track.ChestTracker;
 import fr.coffres.track.Containers;
@@ -29,6 +33,8 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
 
     private DataStore store;
     private ProjectStore projects;
+    private PlanStore plans;
+    private BuildScanner scanner;
     private AuthManager auth;
     private AssetManager assets;
     private Containers containers;
@@ -50,6 +56,8 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         containers = new Containers();
         store = new DataStore(data, getLogger());
         projects = new ProjectStore(data.resolve("projects.json"), getLogger(), store::bump);
+        plans = new PlanStore(data.resolve("plans"), getLogger());
+        scanner = new BuildScanner(this, plans);
         auth = new AuthManager(data.resolve("sessions.json"), getLogger());
         linkMode = new LinkMode();
         locator = new Locator(this, containers);
@@ -70,6 +78,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         assets.start();
 
         Bukkit.getPluginManager().registerEvents(tracker, this);
+        Bukkit.getPluginManager().registerEvents(scanner, this);
         Bukkit.getPluginManager().registerEvents(menus, this);
         Bukkit.getPluginManager().registerEvents(this, this);
         PluginCommand cmd = getCommand("coffres");
@@ -80,6 +89,8 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         }
 
         Bukkit.getScheduler().runTaskTimer(this, tracker::tick, 20L, 1L);
+        Bukkit.getScheduler().runTaskTimer(this, scanner::tick, 40L, 1L);
+        loadBuilds();
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             linkMode.tick();
             bridge.updatePositions();
@@ -88,6 +99,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
             store.save();
             projects.pruneChests(new HashSet<>(store.ids()));
             projects.save();
+            plans.save();
             auth.save();
         }, 600L, 600L);
 
@@ -116,9 +128,34 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         if (projects != null) {
             projects.save();
         }
+        if (plans != null) {
+            plans.save();
+        }
         if (auth != null) {
             auth.save();
         }
+    }
+
+    /** Loads the plans of the projects placed in the world (in the background), then checks them. */
+    private void loadBuilds() {
+        List<Project> placed = projects.all().stream().filter(p -> p.placement != null && p.planBlocks > 0).toList();
+        if (placed.isEmpty()) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            List<String> ok = new java.util.ArrayList<>();
+            for (Project p : placed) {
+                Build b = plans.activate(p);
+                if (b != null) {
+                    ok.add(p.id);
+                }
+            }
+            Bukkit.getScheduler().runTask(this, () -> {
+                for (String id : ok) {
+                    scanner.rescan(id, null);
+                }
+            });
+        });
     }
 
     private void applyConfig() {
@@ -132,6 +169,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         linkMode.setTimeoutSeconds(cfg.getInt("tracking.link-mode-timeout-seconds", 180));
         locator.setDurationSeconds(cfg.getInt("locate.duration-seconds", 60));
         auth.setSessionDays(cfg.getInt("auth.session-days", 180));
+        scanner.configure(cfg.getInt("projects.check-blocks-per-tick", 20_000), cfg.getInt("projects.recheck-minutes", 10));
 
         int port = cfg.getInt("web.port", 8125);
         String configured = cfg.getString("web.public-url", "").trim();
@@ -147,7 +185,8 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         FileConfiguration cfg = getConfig();
         return new WebServer.Settings(cfg.getString("web.server-name", "Mon serveur"), publicUrl, locator.durationSeconds(),
                 Math.max(1, Math.min(200, cfg.getInt("projects.max-file-mb", 20))),
-                Math.max(1, cfg.getInt("projects.max-per-player", 15)));
+                Math.max(1, cfg.getInt("projects.max-per-player", 15)),
+                Math.max(1_000, Math.min(100_000_000, cfg.getInt("projects.max-check-blocks", 10_000_000))));
     }
 
     private void startWeb() {
@@ -159,7 +198,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         String bind = cfg.getString("web.bind", "0.0.0.0");
         int port = cfg.getInt("web.port", 8125);
         webKey = bind + ":" + port;
-        web = new WebServer(getLogger(), store, projects, auth, assets, bridge, webSettings());
+        web = new WebServer(getLogger(), store, projects, plans, auth, assets, bridge, webSettings());
         web.loadStatic(CoffresPlugin.class, getDataFolder().toPath().resolve("web"));
         try {
             web.start(bind, port);
@@ -226,6 +265,14 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
 
     public ProjectStore projects() {
         return projects;
+    }
+
+    public PlanStore plans() {
+        return plans;
+    }
+
+    public BuildScanner buildScanner() {
+        return scanner;
     }
 
     public ProjectsInGame projectsGame() {

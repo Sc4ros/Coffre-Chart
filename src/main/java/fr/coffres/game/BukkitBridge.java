@@ -32,6 +32,7 @@ public final class BukkitBridge implements GameBridge {
     private final Locator locator;
     private final Map<UUID, Position> positions = new ConcurrentHashMap<>();
     private volatile List<String> online = List.of();
+    private volatile List<String> worlds = List.of();
 
     public BukkitBridge(CoffresPlugin plugin, DataStore store, Locator locator) {
         this.plugin = plugin;
@@ -50,6 +51,11 @@ public final class BukkitBridge implements GameBridge {
             names.add(p.getName());
         }
         online = List.copyOf(names);
+        List<String> w = new ArrayList<>();
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            w.add(world.getName());
+        }
+        worlds = List.copyOf(w);
     }
 
     public void forget(UUID uuid) {
@@ -136,5 +142,15 @@ public final class BukkitBridge implements GameBridge {
     @Override
     public String minecraftVersion() {
         return Bukkit.getMinecraftVersion();
+    }
+
+    @Override
+    public List<String> worlds() {
+        return worlds;
+    }
+
+    @Override
+    public void rescan(String projectId, UUID who) {
+        Bukkit.getScheduler().runTask(plugin, () -> plugin.buildScanner().rescan(projectId, who));
     }
 }

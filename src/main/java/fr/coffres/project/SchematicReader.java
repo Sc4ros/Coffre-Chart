@@ -23,7 +23,7 @@ public final class SchematicReader {
 
     /** What a plan needs. {@code materials} is sorted, most needed first. */
     public record Schematic(String format, String name, String author, int sizeX, int sizeY, int sizeZ,
-                            long blocks, Map<String, Long> materials) {
+                            long blocks, Map<String, Long> materials, Plan plan, String planNote) {
     }
 
     /** Biggest plan accepted, in blocks (a 700 × 384 × 1 500 build). */
@@ -37,35 +37,43 @@ public final class SchematicReader {
      * @param maxUnpackedBytes refuse files bigger than this once decompressed
      */
     public static Schematic read(byte[] file, long maxUnpackedBytes) throws IOException {
+        return read(file, maxUnpackedBytes, Plan.DEFAULT_MAX_BLOCKS);
+    }
+
+    /**
+     * @param maxPlanBlocks keep the position of each block (to check what is already built) only up to this many blocks
+     */
+    public static Schematic read(byte[] file, long maxUnpackedBytes, int maxPlanBlocks) throws IOException {
         Map<String, Object> root = Nbt.read(file, maxUnpackedBytes);
         if (Nbt.compound(root, "Regions") != null) {
-            return litematic(root);
+            return litematic(root, maxPlanBlocks);
         }
         Map<String, Object> wrapped = Nbt.compound(root, "Schematic");
         if (wrapped != null) {
-            return sponge(wrapped);
+            return sponge(wrapped, maxPlanBlocks);
         }
         if (Nbt.compound(root, "Blocks") != null || Nbt.compound(root, "Palette") != null) {
-            return sponge(root);
+            return sponge(root, maxPlanBlocks);
         }
         if (root.get("Blocks") instanceof byte[]) {
             return legacy(root);
         }
         if (Nbt.list(root, "blocks") != null && (Nbt.list(root, "palette") != null || Nbt.list(root, "palettes") != null)) {
-            return structure(root);
+            return structure(root, maxPlanBlocks);
         }
         throw new Nbt.NbtException("Ce fichier n'est pas un schéma reconnu (.litematic, .schem, .schematic ou .nbt).");
     }
 
     // ------------------------------------------------------------------ Litematica
 
-    private static Schematic litematic(Map<String, Object> root) throws IOException {
+    private static Schematic litematic(Map<String, Object> root, int maxPlanBlocks) throws IOException {
         Map<String, Object> meta = Nbt.compound(root, "Metadata");
         Map<String, Object> regions = Nbt.compound(root, "Regions");
         if (regions.size() > 4096) {
             throw new Nbt.NbtException("Ce schéma a trop de régions.");
         }
-        Counter out = new Counter();
+        // First the box around every region (positions are relative to the plan's origin), then the blocks.
+        List<Map<String, Object>> valid = new ArrayList<>();
         long total = 0;
         int[] box = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
         for (Object value : regions.values()) {
@@ -77,8 +85,7 @@ public final class SchematicReader {
             Map<String, Object> size = Nbt.compound(region, "Size");
             Map<String, Object> pos = Nbt.compound(region, "Position");
             List<Object> palette = Nbt.list(region, "BlockStatePalette");
-            Object rawStates = region.get("BlockStates");
-            if (size == null || palette == null || palette.isEmpty() || !(rawStates instanceof long[] states)) {
+            if (size == null || palette == null || palette.isEmpty() || !(region.get("BlockStates") instanceof long[])) {
                 continue;
             }
             long sx = Nbt.number(size, "x", 0);
@@ -92,10 +99,35 @@ public final class SchematicReader {
             if (total > MAX_VOLUME) {
                 throw tooBig();
             }
-            if (pos != null) {
-                grow(box, Nbt.number(pos, "x", 0), sx, 0);
-                grow(box, Nbt.number(pos, "y", 0), sy, 1);
-                grow(box, Nbt.number(pos, "z", 0), sz, 2);
+            grow(box, pos == null ? 0 : Nbt.number(pos, "x", 0), sx, 0);
+            grow(box, pos == null ? 0 : Nbt.number(pos, "y", 0), sy, 1);
+            grow(box, pos == null ? 0 : Nbt.number(pos, "z", 0), sz, 2);
+            valid.add(region);
+        }
+        Plan.Builder plan = valid.isEmpty() ? null
+                : new Plan.Builder(box[0], box[1], box[2], span(box, 0), span(box, 1), span(box, 2), maxPlanBlocks);
+        Counter out = new Counter();
+        for (Map<String, Object> region : valid) {
+            Map<String, Object> size = Nbt.compound(region, "Size");
+            Map<String, Object> pos = Nbt.compound(region, "Position");
+            List<Object> palette = Nbt.list(region, "BlockStatePalette");
+            long[] states = (long[]) region.get("BlockStates");
+            long sx = Nbt.number(size, "x", 0);
+            long sy = Nbt.number(size, "y", 0);
+            long sz = Nbt.number(size, "z", 0);
+            int ax = (int) Math.abs(sx);
+            int az = (int) Math.abs(sz);
+            long volume = Math.abs(sx) * Math.abs(sy) * Math.abs(sz);
+            // Lowest corner of the region: a negative size goes towards negative coordinates.
+            long px = pos == null ? 0 : Nbt.number(pos, "x", 0);
+            long py = pos == null ? 0 : Nbt.number(pos, "y", 0);
+            long pz = pos == null ? 0 : Nbt.number(pos, "z", 0);
+            int mx = (int) (sx >= 0 ? px : px + sx + 1);
+            int my = (int) (sy >= 0 ? py : py + sy + 1);
+            int mz = (int) (sz >= 0 ? pz : pz + sz + 1);
+            int[] ids = new int[palette.size()];
+            for (int i = 0; i < ids.length; i++) {
+                ids[i] = plan == null || plan.failed() ? -1 : plan.stateId(stateString(palette.get(i)));
             }
             // Litematica packs palette indexes tightly: one entry may start in a long and end in the next.
             int bits = Math.max(2, 32 - Integer.numberOfLeadingZeros(palette.size() - 1));
@@ -114,6 +146,12 @@ public final class SchematicReader {
                         : ((states[si] >>> off) | (states[ei] << (64 - off))) & mask;
                 if (v < counts.length) {
                     counts[(int) v]++;
+                    if (plan != null && ids[(int) v] >= 0) {
+                        int x = (int) (i % ax);
+                        int z = (int) ((i / ax) % az);
+                        int y = (int) (i / ((long) ax * az));
+                        plan.add(mx + x, my + y, mz + z, ids[(int) v]);
+                    }
                 }
             }
             addPalette(palette, counts, out);
@@ -122,7 +160,7 @@ public final class SchematicReader {
         int x = enclosing != null ? (int) Math.abs(Nbt.number(enclosing, "x", 0)) : span(box, 0);
         int y = enclosing != null ? (int) Math.abs(Nbt.number(enclosing, "y", 0)) : span(box, 1);
         int z = enclosing != null ? (int) Math.abs(Nbt.number(enclosing, "z", 0)) : span(box, 2);
-        return out.result("litematic", Nbt.string(meta, "Name"), Nbt.string(meta, "Author"), x, y, z);
+        return out.result("litematic", Nbt.string(meta, "Name"), Nbt.string(meta, "Author"), x, y, z, plan);
     }
 
     /** A negative region size means the region extends towards negative coordinates from its position. */
@@ -139,7 +177,7 @@ public final class SchematicReader {
 
     // ------------------------------------------------------------------ Sponge (.schem, WorldEdit 7+)
 
-    private static Schematic sponge(Map<String, Object> s) throws IOException {
+    private static Schematic sponge(Map<String, Object> s, int maxPlanBlocks) throws IOException {
         long w = Nbt.number(s, "Width", 0);
         long h = Nbt.number(s, "Height", 0);
         long l = Nbt.number(s, "Length", 0);
@@ -175,7 +213,12 @@ public final class SchematicReader {
                 states[n.intValue()] = e.getKey();
             }
         }
-        // Palette indexes are stored as varints, one after the other.
+        Plan.Builder plan = new Plan.Builder(0, 0, 0, (int) w, (int) h, (int) l, maxPlanBlocks);
+        int[] ids = new int[max + 1];
+        for (int i = 0; i <= max; i++) {
+            ids[i] = states[i] == null || plan.failed() ? -1 : plan.stateId(states[i]);
+        }
+        // Palette indexes are stored as varints, one after the other: x first, then z, then y.
         long[] counts = new long[max + 1];
         int pos = 0;
         long index = 0;
@@ -193,6 +236,9 @@ public final class SchematicReader {
             } while ((b & 0x80) != 0);
             if (value >= 0 && value <= max) {
                 counts[value]++;
+                if (ids[value] >= 0) {
+                    plan.add((int) (index % w), (int) (index / (w * l)), (int) ((index / w) % l), ids[value]);
+                }
             }
             index++;
         }
@@ -204,7 +250,7 @@ public final class SchematicReader {
             }
         }
         Map<String, Object> meta = Nbt.compound(s, "Metadata");
-        return out.result("schem", Nbt.string(meta, "Name"), Nbt.string(meta, "Author"), (int) w, (int) h, (int) l);
+        return out.result("schem", Nbt.string(meta, "Name"), Nbt.string(meta, "Author"), (int) w, (int) h, (int) l, plan);
     }
 
     // ------------------------------------------------------------------ MCEdit (.schematic, before 1.13)
@@ -232,12 +278,14 @@ public final class SchematicReader {
                 LegacyBlocks.items(k >> 4, k & 0xF, counts[k], out);
             }
         }
-        return out.result("schematic", null, null, (int) w, (int) h, (int) l);
+        return out.result("schematic", null, null, (int) w, (int) h, (int) l, null,
+                "Les fichiers .schematic (Minecraft 1.12 et avant) ne permettent pas de vérifier les blocs posés : "
+                        + "envoie plutôt un .litematic ou un .schem.");
     }
 
     // ------------------------------------------------------------------ structure blocks / Create (.nbt)
 
-    private static Schematic structure(Map<String, Object> s) throws IOException {
+    private static Schematic structure(Map<String, Object> s, int maxPlanBlocks) throws IOException {
         List<Object> palette = Nbt.list(s, "palette");
         if (palette == null) {
             List<Object> palettes = Nbt.list(s, "palettes");
@@ -248,24 +296,35 @@ public final class SchematicReader {
             List<Object> first = (List<Object>) palettes.getFirst();
             palette = first;
         }
-        long[] counts = new long[palette.size()];
-        for (Object o : Nbt.list(s, "blocks")) {
-            if (o instanceof Map<?, ?>) {
-                @SuppressWarnings("unchecked")
-                long st = Nbt.number((Map<String, Object>) o, "state", -1);
-                if (st >= 0 && st < counts.length) {
-                    counts[(int) st]++;
-                }
-            }
-        }
-        Counter out = new Counter();
-        addPalette(palette, counts, out);
         int[] size = new int[3];
         List<Object> sz = Nbt.list(s, "size");
         for (int i = 0; sz != null && i < 3 && i < sz.size(); i++) {
             size[i] = sz.get(i) instanceof Number n ? n.intValue() : 0;
         }
-        return out.result("nbt", null, Nbt.string(s, "author"), size[0], size[1], size[2]);
+        Plan.Builder plan = new Plan.Builder(0, 0, 0, size[0], size[1], size[2], maxPlanBlocks);
+        int[] ids = new int[palette.size()];
+        for (int i = 0; i < ids.length; i++) {
+            ids[i] = plan.failed() ? -1 : plan.stateId(stateString(palette.get(i)));
+        }
+        long[] counts = new long[palette.size()];
+        for (Object o : Nbt.list(s, "blocks")) {
+            if (o instanceof Map<?, ?>) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> b = (Map<String, Object>) o;
+                long st = Nbt.number(b, "state", -1);
+                if (st >= 0 && st < counts.length) {
+                    counts[(int) st]++;
+                    List<Object> p = Nbt.list(b, "pos");
+                    if (ids[(int) st] >= 0 && p != null && p.size() >= 3
+                            && p.get(0) instanceof Number px && p.get(1) instanceof Number py && p.get(2) instanceof Number pz) {
+                        plan.add(px.intValue(), py.intValue(), pz.intValue(), ids[(int) st]);
+                    }
+                }
+            }
+        }
+        Counter out = new Counter();
+        addPalette(palette, counts, out);
+        return out.result("nbt", null, Nbt.string(s, "author"), size[0], size[1], size[2], plan);
     }
 
     // ------------------------------------------------------------------ helpers
@@ -287,6 +346,27 @@ public final class SchematicReader {
         }
     }
 
+    /** {Name: "minecraft:oak_door", Properties: {half: "lower"}} → "minecraft:oak_door[half=lower]" (properties sorted). */
+    private static String stateString(Object entry) {
+        if (!(entry instanceof Map<?, ?>)) {
+            return "minecraft:air";
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> e = (Map<String, Object>) entry;
+        String name = Nbt.string(e, "Name");
+        if (name == null) {
+            return "minecraft:air";
+        }
+        Map<String, Object> raw = Nbt.compound(e, "Properties");
+        if (raw == null || raw.isEmpty()) {
+            return name;
+        }
+        StringBuilder b = new StringBuilder(name).append('[');
+        new java.util.TreeMap<>(raw).forEach((k, v) -> b.append(k).append('=').append(v).append(','));
+        b.setLength(b.length() - 1);
+        return b.append(']').toString();
+    }
+
     private static Nbt.NbtException damaged() {
         return new Nbt.NbtException("Le fichier est abîmé ou incomplet.");
     }
@@ -305,7 +385,16 @@ public final class SchematicReader {
             }
         }
 
-        Schematic result(String format, String name, String author, int x, int y, int z) throws Nbt.NbtException {
+        Schematic result(String format, String name, String author, int x, int y, int z, Plan.Builder plan) throws Nbt.NbtException {
+            if (plan == null) {
+                return result(format, name, author, x, y, z, null, "Ce plan ne contient aucun bloc à vérifier.");
+            }
+            Plan built = plan.build();
+            return result(format, name, author, x, y, z, built,
+                    built != null ? null : plan.failed() ? plan.failure() : "Ce plan ne contient aucun bloc à vérifier.");
+        }
+
+        Schematic result(String format, String name, String author, int x, int y, int z, Plan plan, String planNote) throws Nbt.NbtException {
             if (map.isEmpty()) {
                 throw new Nbt.NbtException("Ce schéma ne contient aucun bloc à poser.");
             }
@@ -317,7 +406,7 @@ public final class SchematicReader {
                 sorted.put(e.getKey(), e.getValue());
                 total += e.getValue();
             }
-            return new Schematic(format, blankToNull(name), blankToNull(author), x, y, z, total, sorted);
+            return new Schematic(format, blankToNull(name), blankToNull(author), x, y, z, total, sorted, plan, planNote);
         }
     }
 

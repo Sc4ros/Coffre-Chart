@@ -36,4 +36,11 @@ public final class Project {
     public Map<String, Long> materials = new LinkedHashMap<>();
     /** Linked container ids. */
     public List<String> chests = new ArrayList<>();
+
+    /** Blocks of the plan whose position is kept in plans/ (to check what is built), 0 when it is not. */
+    public int planBlocks;
+    /** Why the placed blocks cannot be checked for this plan, or null. */
+    public String planNote;
+    /** Where the plan is built in the world, or null when it is not placed yet. */
+    public Placement placement;
 }

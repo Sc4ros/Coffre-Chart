@@ -53,6 +53,15 @@ projects:
   max-file-mb: 20
   # Nombre de projets maximum par joueur (les admins n'ont pas de limite).
   max-per-player: 15
+  # Blocs déjà posés : quand un projet est placé dans le monde (sur le site, ou /coffres projet placer),
+  # Coffres regarde quels blocs du plan sont déjà construits.
+  # Nombre de blocs vérifiés par tick pendant une vérification complète (plus haut = plus rapide, plus de calcul).
+  check-blocks-per-tick: 20000
+  # Toutes les combien de minutes refaire une vérification complète (0 = jamais, seulement en direct et sur demande).
+  recheck-minutes: 10
+  # Au-delà de ce nombre de blocs dans un plan, la vérification des blocs posés est désactivée pour lui
+  # (environ 6 octets de mémoire par bloc pour chaque projet placé).
+  max-check-blocks: 10000000
 
 assets:
   # Télécharge les textures et les noms d'objets officiels depuis les serveurs de Mojang

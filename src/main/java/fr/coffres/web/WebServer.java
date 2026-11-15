@@ -8,10 +8,12 @@ import com.google.gson.JsonObject;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import fr.coffres.model.Placement;
 import fr.coffres.model.Project;
 import fr.coffres.project.Nbt;
 import fr.coffres.project.SchematicReader;
 import fr.coffres.store.DataStore;
+import fr.coffres.store.PlanStore;
 import fr.coffres.store.ProjectStore;
 
 import java.io.ByteArrayOutputStream;
@@ -52,7 +54,7 @@ import java.util.zip.GZIPOutputStream;
 public final class WebServer {
 
     /** Values the site shows that come from the config. */
-    public record Settings(String serverName, String publicUrl, int locateSeconds, int maxFileMb, int maxProjects) {
+    public record Settings(String serverName, String publicUrl, int locateSeconds, int maxFileMb, int maxProjects, int maxCheckBlocks) {
     }
 
     private record StaticFile(byte[] data, byte[] gz, String type, String etag) {
@@ -78,6 +80,7 @@ public final class WebServer {
     private final Logger logger;
     private final DataStore store;
     private final ProjectStore projects;
+    private final PlanStore plans;
     private final AuthManager auth;
     private final AssetManager assets;
     private final GameBridge game;
@@ -91,16 +94,17 @@ public final class WebServer {
     private HttpServer server;
     private ExecutorService pool;
 
-    public WebServer(Logger logger, DataStore store, ProjectStore projects, AuthManager auth, AssetManager assets, GameBridge game,
-                     Settings settings) {
+    public WebServer(Logger logger, DataStore store, ProjectStore projects, PlanStore plans, AuthManager auth, AssetManager assets,
+                     GameBridge game, Settings settings) {
         this.logger = logger;
         this.store = store;
         this.projects = projects;
+        this.plans = plans;
         this.auth = auth;
         this.assets = assets;
         this.game = game;
         this.settings = settings;
-        this.api = new Api(store, projects);
+        this.api = new Api(store, projects, plans);
     }
 
     public void setSettings(Settings settings) {
@@ -455,6 +459,7 @@ public final class WebServer {
                 name = plan.name() != null ? plan.name() : baseName(fileName);
             }
             Project p = projects.create(name, s.uuid, s.name, "1".equals(q.get("shared")), fileName, plan);
+            storePlan(p, plan);
             logger.info(s.name + " a créé le projet « " + p.name + " » (" + p.materials.size() + " sortes de blocs, "
                     + p.blocks + " au total).");
             sendJson(ex, 200, api.project(s, p.id));
@@ -467,7 +472,7 @@ public final class WebServer {
         throw new HttpError(404, "Route inconnue.");
     }
 
-    /** /api/project/{id}[/chests|/file|/delete] */
+    /** /api/project/{id}[/chests|/file|/placement|/scan|/delete] */
     private void handleProject(HttpExchange ex, AuthManager.Session s, String method, Map<String, String> q, String rest)
             throws Exception {
         int slash = rest.indexOf('/');
@@ -509,12 +514,30 @@ public final class WebServer {
             case "file" -> {
                 requirePost(method);
                 requireProjectEdit(p, s);
-                projects.replaceFile(id, fileName(q.get("file")), parsePlan(ex));
+                SchematicReader.Schematic plan = parsePlan(ex);
+                projects.replaceFile(id, fileName(q.get("file")), plan);
+                storePlan(projects.get(id), plan);
+            }
+            case "placement" -> {
+                requirePost(method);
+                requireProjectEdit(p, s);
+                placement(s, p, body(ex));
+            }
+            case "scan" -> {
+                requirePost(method);
+                if (!Api.canLink(p, s)) {
+                    throw new HttpError(403, "Seul le créateur de ce projet solo (ou un admin) peut le vérifier.");
+                }
+                if (p.placement == null || plans.build(id) == null) {
+                    throw new HttpError(409, "Place d'abord le projet dans le monde.");
+                }
+                game.rescan(id, UUID.fromString(s.uuid));
             }
             case "delete" -> {
                 requirePost(method);
                 requireProjectEdit(p, s);
                 projects.delete(id);
+                plans.delete(id);
                 logger.info(s.name + " a supprimé le projet « " + p.name + " ».");
                 sendJson(ex, 200, Map.of("ok", true));
                 return;
@@ -525,7 +548,85 @@ public final class WebServer {
         if (out == null) {
             throw new HttpError(404, "Ce projet n'existe plus ou est privé.");
         }
+        out.put("worlds", game.worlds());
         sendJson(ex, 200, out);
+    }
+
+    /** Saves the full plan next to the project, and checks the build again if the project is placed. */
+    private void storePlan(Project p, SchematicReader.Schematic plan) {
+        if (p == null) {
+            return;
+        }
+        try {
+            plans.savePlan(p.id, plan.plan());
+        } catch (IOException e) {
+            logger.log(Level.WARNING, "Impossible d'enregistrer le plan du projet « " + p.name + " »", e);
+        }
+        if (p.placement != null) {
+            if (plans.activate(p) != null) {
+                game.rescan(p.id, null);
+            } else {
+                plans.deactivate(p.id);
+            }
+        }
+    }
+
+    /** Places the project in the world, from the form of the site or the player's position, or removes the placement. */
+    private void placement(AuthManager.Session s, Project p, JsonObject b) {
+        if (b.has("remove") && b.get("remove").getAsBoolean()) {
+            projects.setPlacement(p.id, null);
+            plans.deactivate(p.id);
+            logger.info(s.name + " a retiré l'emplacement du projet « " + p.name + " ».");
+            return;
+        }
+        if (p.planBlocks <= 0) {
+            throw new HttpError(409, p.planNote != null ? p.planNote
+                    : "Renvoie le fichier du projet pour pouvoir vérifier les blocs posés.");
+        }
+        int rot;
+        try {
+            rot = b.has("rot") && !b.get("rot").isJsonNull() ? b.get("rot").getAsInt() : 0;
+        } catch (RuntimeException e) {
+            rot = 0;
+        }
+        String mirror = str(b, "mirror");
+        Placement at;
+        if (b.has("here") && b.get("here").getAsBoolean()) {
+            GameBridge.Position pos = game.position(UUID.fromString(s.uuid));
+            if (pos == null) {
+                throw new HttpError(409, "Connecte-toi au serveur Minecraft pour utiliser ta position.");
+            }
+            at = new Placement(pos.world(), (int) Math.floor(pos.x()), (int) Math.floor(pos.y()), (int) Math.floor(pos.z()), rot, mirror);
+        } else {
+            String world = str(b, "world");
+            List<String> worlds = game.worlds();
+            if (world == null || world.isBlank() || (!worlds.isEmpty() && !worlds.contains(world))) {
+                throw new HttpError(400, "Choisis un monde.");
+            }
+            int[] xyz = new int[3];
+            String[] keys = {"x", "y", "z"};
+            for (int i = 0; i < 3; i++) {
+                try {
+                    xyz[i] = b.get(keys[i]).getAsInt();
+                } catch (RuntimeException e) {
+                    throw new HttpError(400, "Indique les coordonnées x, y et z (des nombres entiers).");
+                }
+            }
+            if (Math.abs(xyz[0]) > 30_000_000 || Math.abs(xyz[2]) > 30_000_000 || xyz[1] < -2048 || xyz[1] > 4096) {
+                throw new HttpError(400, "Ces coordonnées sont en dehors du monde.");
+            }
+            at = new Placement(world, xyz[0], xyz[1], xyz[2], rot, mirror);
+        }
+        at.by = s.name;
+        at.at = System.currentTimeMillis();
+        projects.setPlacement(p.id, at);
+        Project fresh = projects.get(p.id);
+        if (fresh == null || plans.activate(fresh) == null) {
+            throw new HttpError(500, "Le plan de ce projet est illisible. Renvoie son fichier.");
+        }
+        logger.info(s.name + " a placé le projet « " + p.name + " » en " + at.world + " " + at.x + " " + at.y + " " + at.z
+                + " (rotation " + at.rot + "°, miroir " + at.mirror + ").");
+        game.rescan(p.id, UUID.fromString(s.uuid));
     }
 
     private static void requireProjectEdit(Project p, AuthManager.Session s) {
@@ -555,7 +656,7 @@ public final class WebServer {
             throw new HttpError(503, "Le serveur lit déjà d'autres schémas. Réessaie dans un instant.");
         }
         try {
-            return SchematicReader.read(data, MAX_UNPACKED);
+            return SchematicReader.read(data, MAX_UNPACKED, settings.maxCheckBlocks());
         } catch (Nbt.NbtException e) {
             throw new HttpError(400, e.getMessage());
         } catch (IOException | RuntimeException e) {

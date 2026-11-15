@@ -4,8 +4,10 @@ import fr.coffres.model.LogEntry;
 import fr.coffres.model.Project;
 import fr.coffres.model.SlotItem;
 import fr.coffres.model.StoredChest;
+import fr.coffres.project.Build;
 import fr.coffres.project.ProjectProgress;
 import fr.coffres.store.DataStore;
+import fr.coffres.store.PlanStore;
 import fr.coffres.store.ProjectStore;
 
 import java.time.Instant;
@@ -34,11 +36,17 @@ public final class Api {
 
     private final DataStore store;
     private final ProjectStore projects;
+    private final PlanStore plans;
     private final ZoneId zone = ZoneId.systemDefault();
 
     public Api(DataStore store, ProjectStore projects) {
+        this(store, projects, null);
+    }
+
+    public Api(DataStore store, ProjectStore projects, PlanStore plans) {
         this.store = store;
         this.projects = projects;
+        this.plans = plans;
     }
 
     // ------------------------------------------------------------------ visibility
@@ -683,8 +691,15 @@ public final class Api {
         return p.shared || canEdit(p, s);
     }
 
+    private Build build(Project p) {
+        Build b = plans == null || p.placement == null ? null : plans.build(p.id);
+        return b != null && b.at == p.placement ? b : null;
+    }
+
     private ProjectProgress progress(Project p, AuthManager.Session s) {
-        return ProjectProgress.of(p, store.chestsLocked(), c -> visibleAll(c, s), store.stackSizesLocked());
+        Build b = build(p);
+        return ProjectProgress.of(p, store.chestsLocked(), c -> visibleAll(c, s), store.stackSizesLocked(),
+                b == null ? null : b.placedItems());
     }
 
     private Map<String, Object> projectSummary(Project p, AuthManager.Session s, ProjectProgress pr) {
@@ -700,10 +715,16 @@ public final class Api {
         m.put("format", p.format);
         m.put("size", List.of(p.sx, p.sy, p.sz));
         m.put("need", pr.need);
+        m.put("placed", pr.placed);
         m.put("have", pr.have);
         m.put("missing", pr.missing());
         m.put("ratio", pr.ratio());
         m.put("percent", pr.percent());
+        m.put("placedRatio", pr.placedRatio());
+        m.put("placedPercent", pr.placedPercent());
+        m.put("chestPercent", pr.chestPercent());
+        m.put("checkable", p.planBlocks > 0);
+        m.put("inWorld", p.placement != null && p.planBlocks > 0);
         m.put("kinds", pr.lines.size());
         m.put("doneKinds", pr.doneKinds);
         m.put("chests", pr.linked.size());
@@ -752,11 +773,39 @@ public final class Api {
                 out.put("schemName", p.schemName);
                 out.put("author", p.author);
                 out.put("blocks", p.blocks);
+                out.put("planNote", p.planBlocks > 0 ? null
+                        : p.planNote != null ? p.planNote
+                        : "Ce projet a été créé avant la vérification des blocs posés : renvoie son fichier (Modifier → Remplacer le fichier) pour l'activer.");
+                if (p.placement != null) {
+                    Map<String, Object> at = new LinkedHashMap<>();
+                    at.put("world", p.placement.world);
+                    at.put("x", p.placement.x);
+                    at.put("y", p.placement.y);
+                    at.put("z", p.placement.z);
+                    at.put("rot", p.placement.rot);
+                    at.put("mirror", p.placement.mirror);
+                    at.put("by", p.placement.by);
+                    at.put("at", p.placement.at);
+                    out.put("placement", at);
+                }
+                Build built = build(p);
+                if (built != null) {
+                    Map<String, Object> bm = new LinkedHashMap<>();
+                    bm.put("blocks", built.size());
+                    bm.put("placedBlocks", built.placedCount());
+                    bm.put("scanning", built.scanning());
+                    bm.put("progress", built.scanProgress());
+                    bm.put("lastScan", built.lastScan());
+                    bm.put("unloaded", built.unloaded());
+                    bm.put("box", List.of(built.minX, built.minY, built.minZ, built.maxX, built.maxY, built.maxZ));
+                    out.put("build", bm);
+                }
                 List<Map<String, Object>> mats = new ArrayList<>(pr.lines.size());
                 for (ProjectProgress.Line l : pr.lines) {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("id", l.id());
                     m.put("need", l.need());
+                    m.put("placed", l.placed());
                     m.put("have", l.have());
                     m.put("elsewhere", l.elsewhere());
                     m.put("st", l.stack());

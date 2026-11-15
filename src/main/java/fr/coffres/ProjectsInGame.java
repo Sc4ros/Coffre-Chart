@@ -2,6 +2,8 @@ package fr.coffres;
 
 import fr.coffres.model.Project;
 import fr.coffres.model.StoredChest;
+import fr.coffres.model.Placement;
+import fr.coffres.project.Build;
 import fr.coffres.project.ProjectProgress;
 import fr.coffres.store.DataStore;
 import fr.coffres.store.ProjectStore;
@@ -60,7 +62,9 @@ public final class ProjectsInGame {
         DataStore store = plugin.store();
         synchronized (store) {
             synchronized (plugin.projects()) {
-                return ProjectProgress.of(pr, store.chestsLocked(), c -> canSee(p, c), store.stackSizesLocked());
+                Build b = pr.placement == null ? null : plugin.plans().build(pr.id);
+                return ProjectProgress.of(pr, store.chestsLocked(), c -> canSee(p, c), store.stackSizesLocked(),
+                        b != null && b.at == pr.placement ? b.placedItems() : null);
             }
         }
     }
@@ -108,6 +112,19 @@ public final class ProjectsInGame {
                 }
                 startLinking(p, rest);
             }
+            case "placer", "place" -> place(p, java.util.Arrays.copyOfRange(args, 1, args.length));
+            case "verifier", "vérifier", "check" -> {
+                if (rest.isBlank()) {
+                    Msg.send(p, "<gray>Utilise</gray> <white>/coffres projet verifier \\<projet></white>");
+                    return;
+                }
+                Project pr = find(p, rest);
+                if (pr == null) {
+                    notFound(p, rest);
+                } else {
+                    check(p, pr);
+                }
+            }
             case "arreter", "arrêter", "stop" -> {
                 if (plugin.linkMode().isActive(p)) {
                     plugin.linkMode().stop(p, false);
@@ -130,6 +147,9 @@ public final class ProjectsInGame {
         Msg.raw(p, "  <aqua>/coffres projet</aqua> <dark_gray>·</dark_gray> <gray>la liste des projets et leur avancement</gray>");
         Msg.raw(p, "  <aqua>/coffres projet \\<nom></aqua> <dark_gray>·</dark_gray> <gray>les blocs qu'il manque</gray>");
         Msg.raw(p, "  <aqua>/coffres projet lier \\<nom></aqua> <dark_gray>·</dark_gray> <gray>clic droit sur des coffres pour les lier au projet</gray>");
+        Msg.raw(p, "  <aqua>/coffres projet placer \\<nom> [rotation] [miroir]</aqua> <dark_gray>·</dark_gray> <gray>le plan commence à tes pieds : "
+                + "Coffres compte les blocs déjà posés</gray>");
+        Msg.raw(p, "  <aqua>/coffres projet verifier \\<nom></aqua> <dark_gray>·</dark_gray> <gray>revérifie tous les blocs posés</gray>");
         Msg.raw(p, "  <gray>Pour créer un projet, envoie ton fichier <white>.litematic</white> ou <white>.schem</white> sur le site :</gray> "
                 + "<click:run_command:'/coffres web'><aqua>[Ouvrir le site]</aqua></click>");
     }
@@ -137,6 +157,94 @@ public final class ProjectsInGame {
     private void notFound(Player p, String query) {
         Msg.send(p, "<yellow>Aucun projet</yellow> <white><q></white><yellow>.</yellow> <click:run_command:'/coffres projet'><aqua>[Voir les projets]</aqua></click>",
                 Placeholder.unparsed("q", query));
+    }
+
+    /**
+     * /coffres projet placer &lt;nom…&gt; [0|90|180|270] [aucun|gauche-droite|avant-arriere]: the plan's origin goes to
+     * the block where the player stands.
+     */
+    private void place(Player p, String[] args) {
+        List<String> words = new ArrayList<>(java.util.Arrays.asList(args));
+        String mirror = "none";
+        int rot = 0;
+        if (!words.isEmpty()) {
+            String m = mirrorArg(words.getLast());
+            if (m != null) {
+                mirror = m;
+                words.removeLast();
+            }
+        }
+        if (!words.isEmpty() && words.getLast().matches("-?\\d{1,3}°?")) {
+            int r = Integer.parseInt(words.getLast().replace("°", ""));
+            if (Placement.normRot(r) != r && r != 360) {
+                Msg.send(p, "<red>La rotation doit être 0, 90, 180 ou 270.</red>");
+                return;
+            }
+            rot = Placement.normRot(r);
+            words.removeLast();
+        }
+        String query = String.join(" ", words);
+        if (query.isBlank()) {
+            Msg.send(p, "<gray>Utilise</gray> <white>/coffres projet placer \\<projet> [0|90|180|270] [aucun|gauche-droite|avant-arriere]</white>");
+            Msg.raw(p, "  <dark_gray>Le plan commence au bloc où tu te tiens (l'origine de Litematica, ou le coin le plus bas pour les autres fichiers).</dark_gray>");
+            return;
+        }
+        Project pr = find(p, query);
+        if (pr == null) {
+            notFound(p, query);
+            return;
+        }
+        if (!(p.hasPermission("coffres.admin") || p.getUniqueId().toString().equals(pr.owner))) {
+            Msg.send(p, "<red>Seul le créateur du projet (ou un admin) peut le placer.</red>");
+            return;
+        }
+        if (pr.planBlocks <= 0) {
+            Msg.send(p, "<yellow><why></yellow>", Placeholder.unparsed("why", pr.planNote != null ? pr.planNote
+                    : "Ce projet a été créé avant la vérification des blocs posés : renvoie son fichier sur le site."));
+            return;
+        }
+        org.bukkit.Location l = p.getLocation();
+        Placement at = new Placement(l.getWorld().getName(), l.getBlockX(), l.getBlockY(), l.getBlockZ(), rot, mirror);
+        at.by = p.getName();
+        at.at = System.currentTimeMillis();
+        plugin.projects().setPlacement(pr.id, at);
+        Project fresh = plugin.projects().get(pr.id);
+        String name = pr.name;
+        Msg.send(p, "<green>✔</green> <light_purple><project></light_purple> <gray>placé en</gray> <white>" + at.x + " " + at.y + " " + at.z
+                        + "</white> <dark_gray>(rotation " + at.rot + "°" + ("none".equals(at.mirror) ? "" : ", miroir") + ")</dark_gray> "
+                        + "<gray>· vérification des blocs posés…</gray>",
+                Placeholder.unparsed("project", name));
+        org.bukkit.Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            Build b = fresh == null ? null : plugin.plans().activate(fresh);
+            org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
+                if (b == null) {
+                    Msg.send(p, "<red>Le plan de ce projet est illisible : renvoie son fichier sur le site.</red>");
+                } else {
+                    plugin.buildScanner().rescan(pr.id, p.getUniqueId());
+                }
+            });
+        });
+    }
+
+    private static String mirrorArg(String s) {
+        return switch (s.toLowerCase(Locale.ROOT)) {
+            case "aucun", "none", "non" -> "none";
+            case "gauche-droite", "left-right", "lr" -> "lr";
+            case "avant-arriere", "avant-arrière", "front-back", "fb" -> "fb";
+            default -> null;
+        };
+    }
+
+    /** /coffres projet verifier: checks every block again. */
+    public void check(Player p, Project pr) {
+        if (pr.placement == null || plugin.plans().build(pr.id) == null) {
+            Msg.send(p, "<yellow>Ce projet n'est pas encore placé dans le monde.</yellow> <gray>Sur le site, ou en jeu :</gray> "
+                    + "<white>/coffres projet placer <name></white>", Placeholder.unparsed("name", pr.name));
+            return;
+        }
+        plugin.buildScanner().rescan(pr.id, p.getUniqueId());
+        Msg.send(p, "<gray>Vérification des blocs posés de</gray> <light_purple><project></light_purple><gray>…</gray>",
+                Placeholder.unparsed("project", pr.name));
     }
 
     public void startLinking(Player p, String query) {

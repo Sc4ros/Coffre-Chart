@@ -143,6 +143,7 @@ public final class CoffresCommand implements CommandExecutor, TabCompleter {
                 {"/coffres chercher <objet>", "trouver un objet dans les coffres"},
                 {"/coffres projet", "projets de construction : blocs qu'il faut, avancement"},
                 {"/coffres projet lier <projet>", "clic droit sur des coffres pour les lier au projet"},
+                {"/coffres projet placer <projet> [rotation]", "le plan commence à tes pieds : compte les blocs déjà posés"},
                 {"/coffres nom <nom>", "renommer le coffre que tu regardes"},
                 {"/coffres zone <zone>", "ranger le coffre dans une zone (Base, Ferme…)"},
                 {"/coffres prive", "remettre en privé le coffre commun que tu regardes"},
@@ -355,7 +356,7 @@ public final class CoffresCommand implements CommandExecutor, TabCompleter {
         if (args.length >= 2 && (args[0].equalsIgnoreCase("projet") || args[0].equalsIgnoreCase("projets")) && sender instanceof Player p) {
             if (args.length == 2) {
                 List<String> out = new ArrayList<>();
-                for (String s : List.of("lier", "aide")) {
+                for (String s : List.of("lier", "placer", "verifier", "aide")) {
                     if (s.startsWith(args[1].toLowerCase(Locale.ROOT))) {
                         out.add(s);
                     }
@@ -363,8 +364,18 @@ public final class CoffresCommand implements CommandExecutor, TabCompleter {
                 out.addAll(plugin.projectsGame().names(p, args[1]));
                 return out;
             }
-            if (args.length == 3 && args[1].equalsIgnoreCase("lier")) {
+            if (args.length == 3 && (args[1].equalsIgnoreCase("lier") || args[1].equalsIgnoreCase("placer")
+                    || args[1].equalsIgnoreCase("verifier"))) {
                 return plugin.projectsGame().names(p, args[2]);
+            }
+            if (args.length >= 4 && args[1].equalsIgnoreCase("placer")) {
+                List<String> out = new ArrayList<>();
+                for (String s : List.of("0", "90", "180", "270", "gauche-droite", "avant-arriere")) {
+                    if (s.startsWith(args[args.length - 1].toLowerCase(Locale.ROOT))) {
+                        out.add(s);
+                    }
+                }
+                return out;
             }
             return List.of();
         }

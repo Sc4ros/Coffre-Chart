@@ -30,6 +30,15 @@ public interface GameBridge {
 
     String minecraftVersion();
 
+    /** Names of the worlds of the server (to place a project). */
+    List<String> worlds();
+
+    /**
+     * Checks again, in the world, every block of a placed project. {@code who} (may be null) gets a message in game
+     * when it is done.
+     */
+    void rescan(String projectId, UUID who);
+
     record LocateResult(boolean ok, String message) {
     }
 }

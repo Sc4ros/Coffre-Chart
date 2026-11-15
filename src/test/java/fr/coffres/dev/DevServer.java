@@ -1,6 +1,11 @@
 package fr.coffres.dev;
 
+import fr.coffres.model.Placement;
+import fr.coffres.model.Project;
 import fr.coffres.model.StoredChest;
+import fr.coffres.project.Build;
+import fr.coffres.project.SchematicReader;
+import fr.coffres.store.PlanStore;
 import fr.coffres.store.DataStore;
 import fr.coffres.store.ProjectStore;
 import fr.coffres.web.AssetManager;
@@ -39,14 +44,16 @@ public final class DevServer {
         MockData.fill(store);
         ProjectStore projects = new ProjectStore(dir.resolve("store").resolve("projects.json"), log, store::bump);
         MockData.fillProjects(projects, store);
+        PlanStore plans = new PlanStore(dir.resolve("store").resolve("plans"), log);
+        demoHouse(projects, plans, store);
 
         AuthManager auth = new AuthManager(dir.resolve("sessions.json"), log);
         AssetManager assets = new AssetManager(dir.resolve("cache"), log, "26.2", "fr_fr", true);
         assets.start();
 
-        FakeGame game = new FakeGame(store);
-        WebServer web = new WebServer(log, store, projects, auth, assets, game,
-                new WebServer.Settings("Serveur de test", "http://localhost:" + port, 60, 20, 15));
+        FakeGame game = new FakeGame(store, plans);
+        WebServer web = new WebServer(log, store, projects, plans, auth, assets, game,
+                new WebServer.Settings("Serveur de test", "http://localhost:" + port, 60, 20, 15, 10_000_000));
         if (webDir != null) {
             web.loadStatic(DevServer.class, webDir);
             web.setLiveDir(webDir);
@@ -72,12 +79,80 @@ public final class DevServer {
         Thread.currentThread().join();
     }
 
+    /** The small house of docs/exemples, placed in the world and half built. */
+    private static void demoHouse(ProjectStore projects, PlanStore plans, DataStore store) throws Exception {
+        Path file = Path.of("docs", "exemples", "petite_maison.litematic");
+        if (!Files.isRegularFile(file)) {
+            file = Path.of("..", "..", "docs", "exemples", "petite_maison.litematic"); // ./gradlew runDev runs in build/dev
+        }
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        SchematicReader.Schematic s = SchematicReader.read(Files.readAllBytes(file), 64L * 1024 * 1024);
+        Project p = projects.create("Petite maison", MockData.STEVE.toString(), "Steve", true, "petite_maison.litematic", s);
+        plans.savePlan(p.id, s.plan());
+        for (StoredChest c : store.all()) {
+            if (c.name.equals("Bois") || c.name.equals("Pierres")) {
+                projects.toggleChest(p.id, c.id);
+            }
+        }
+        Placement at = new Placement("world", 120, 64, -30, 90, "none");
+        at.by = "Steve";
+        at.at = System.currentTimeMillis() - 3_600_000L;
+        projects.setPlacement(p.id, at);
+        Build b = plans.activate(projects.get(p.id));
+        FakeGame.build(b, 0.45);
+        b.scanFinished(0);
+    }
+
     /** Pretends Steve and Alex are online near the base. */
     static final class FakeGame implements GameBridge {
         private final DataStore store;
+        private final PlanStore plans;
+        private final Map<String, Double> built = new java.util.concurrent.ConcurrentHashMap<>();
 
-        FakeGame(DataStore store) {
+        FakeGame(DataStore store, PlanStore plans) {
             this.store = store;
+            this.plans = plans;
+        }
+
+        /** The lowest blocks first, like a real build going up. */
+        static void build(Build b, double fraction) {
+            int n = (int) Math.round(b.size() * Math.min(1, fraction));
+            for (int k = 0; k < b.size(); k++) {
+                b.set(k, k < n);
+            }
+        }
+
+        @Override
+        public List<String> worlds() {
+            return List.of("world", "world_nether", "world_the_end");
+        }
+
+        /** Each check finds a bit more built than the last one, in about 3 seconds. */
+        @Override
+        public void rescan(String projectId, UUID who) {
+            Build b = plans.build(projectId);
+            if (b == null) {
+                return;
+            }
+            double f = built.merge(projectId, 0.45, (old, x) -> Math.min(1, old + 0.1));
+            b.scanStarted();
+            store.bump();
+            Thread.ofVirtual().start(() -> {
+                try {
+                    for (int i = 1; i <= 6; i++) {
+                        Thread.sleep(500);
+                        b.scanProgress(i / 6.0);
+                    }
+                    build(b, f);
+                    b.scanFinished(b.at.world.equals("world") ? 0 : b.size() / 3);
+                    store.bump();
+                    System.out.println("  [jeu] vérification de " + projectId + " : " + b.placedCount() + "/" + b.size() + " blocs posés");
+                } catch (InterruptedException ignored) {
+                    // stop
+                }
+            });
         }
 
         @Override

@@ -160,7 +160,11 @@ public final class Menus implements Listener {
         }
         List<String> lore = new ArrayList<>();
         lore.add(ProjectsInGame.bar(progress.ratio(), 20) + " <white>" + progress.percent() + " %</white>");
-        lore.add("<gray>" + Msg.number(progress.have) + " / " + Msg.number(progress.need) + " blocs · "
+        if (pr.placement != null) {
+            lore.add("<green>" + progress.placedPercent() + " % posé</green> <dark_gray>·</dark_gray> <aqua>" + progress.chestPercent()
+                    + " % dans les coffres</aqua>");
+        }
+        lore.add("<gray>" + Msg.number(progress.placed + progress.have) + " / " + Msg.number(progress.need) + " blocs · "
                 + progress.doneKinds + "/" + progress.lines.size() + " sortes complètes</gray>");
         lore.add("<gray>" + (pr.shared ? "Projet commun" : "Projet solo") + " · par " + esc(pr.ownerName == null ? "?" : pr.ownerName)
                 + " · " + progress.linked.size() + " coffre(s) lié(s)</gray>");
@@ -180,7 +184,7 @@ public final class Menus implements Listener {
             }
         } else {
             l.add(Component.empty());
-            l.add(line("<green>✔ Tous les blocs sont dans les coffres !</green>"));
+            l.add(line(progress.placed >= progress.need ? "<green>✔ Construction terminée !</green>" : "<green>✔ Tous les blocs sont réunis !</green>"));
         }
         l.add(Component.empty());
         l.add(line("<yellow>▶ Clic : les blocs qu'il manque</yellow>"));
@@ -222,7 +226,10 @@ public final class Menus implements Listener {
         bottomBar(inv, pg, pages);
         inv.setItem(48, item(Material.SCAFFOLDING, "<light_purple><b>" + esc(pr.name) + "</b></light_purple>", false,
                 ProjectsInGame.bar(progress.ratio(), 20) + " <white>" + progress.percent() + " %</white>",
-                "<gray>" + Msg.number(progress.have) + " / " + Msg.number(progress.need) + " blocs dans les coffres liés</gray>",
+                pr.placement != null
+                        ? "<green>" + Msg.number(progress.placed) + " posés</green> <gray>+</gray> <aqua>" + Msg.number(progress.have)
+                        + " dans les coffres</aqua> <gray>/ " + Msg.number(progress.need) + "</gray>"
+                        : "<gray>" + Msg.number(progress.have) + " / " + Msg.number(progress.need) + " blocs dans les coffres liés</gray>",
                 "<gray>Manque " + Msg.number(progress.missing()) + " blocs · " + (progress.lines.size() - progress.doneKinds) + " sorte(s) incomplète(s)</gray>",
                 "",
                 "<dark_gray>" + esc(pr.file == null ? "" : pr.file) + " · " + pr.sx + "×" + pr.sy + "×" + pr.sz + "</dark_gray>",
@@ -255,9 +262,12 @@ public final class Menus implements Listener {
         meta.displayName((ln.done() ? Component.text("✔ ", NamedTextColor.GREEN).append(name.color(NamedTextColor.GREEN))
                 : name.color(NamedTextColor.WHITE)).decoration(TextDecoration.ITALIC, false));
         List<Component> lore = new ArrayList<>();
-        double ratio = ln.need() == 0 ? 1 : Math.min(1, (double) ln.have() / ln.need());
+        double ratio = ln.need() == 0 ? 1 : Math.min(1, (double) (ln.placed() + ln.useful()) / ln.need());
         lore.add(line(ProjectsInGame.bar(ratio, 16) + " <white>" + (int) Math.floor(ratio * 100) + " %</white>"));
         lore.add(line("<gray>Il en faut :</gray> <white>" + ProjectsInGame.stacks(ln.need(), ln.stack()) + "</white>"));
+        if (ln.placed() > 0) {
+            lore.add(line("<gray>Déjà posés :</gray> <green>" + Msg.number(ln.placed()) + "</green>"));
+        }
         lore.add(line("<gray>Dans les coffres liés :</gray> <white>" + Msg.number(ln.have()) + "</white>"));
         if (!ln.done()) {
             lore.add(line("<gray>Manque :</gray> <gold>" + ProjectsInGame.stacks(ln.missing(), ln.stack()) + "</gold>"));
