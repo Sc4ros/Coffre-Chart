@@ -1,5 +1,23 @@
 # Changements
 
+## 1.3.0 — Blocs déjà posés
+
+- **Un projet peut être placé dans le monde** : monde, coordonnées de l'origine, rotation (0°, 90°, 180°, 270°) et
+  miroir, comme dans Litematica. Sur le site (bouton **Placer dans le monde**, ou **Utiliser ma position en jeu**) ou en
+  jeu avec `/coffres projet placer <nom> [rotation] [miroir]` (le plan commence au bloc où tu te tiens).
+- Coffres **regarde quels blocs du plan sont déjà posés** : une vérification complète quand on place le projet, quand
+  on appuie sur **Revérifier** (ou `/coffres projet verifier <nom>`) et toutes les 10 minutes, puis **en direct** à
+  chaque bloc posé, cassé, brûlé, explosé ou poussé près de la construction. Un bloc compte s'il est **du bon type**
+  (le sens d'un escalier n'est pas vérifié). Les zones du monde qui ne sont pas chargées ne sont jamais chargées exprès.
+- L'avancement devient **posé + dans les coffres + manquant** : un anneau vert et bleu, une tuile « Déjà posés », et
+  pour chaque bloc « 19 posés + 12 en coffre / 45 ». Ce qui est déjà posé n'est plus demandé dans les coffres, ni dans
+  la liste des manquants à copier. Pareil dans les menus en jeu.
+- Le plan complet est maintenant gardé dans `plugins/Coffres/plans/` (environ 6 octets par bloc). Les projets créés
+  avant la 1.3.0 doivent **renvoyer leur fichier une fois** (Modifier → Remplacer le fichier) pour être vérifiés.
+- Les `.schematic` d'avant la 1.13 ne permettent pas cette vérification (les numéros de blocs ne suffisent pas) :
+  ils comptent toujours les matériaux comme avant.
+- Nouveaux réglages : `projects.check-blocks-per-tick`, `projects.recheck-minutes`, `projects.max-check-blocks`.
+
 ## 1.2.1 — Correctif d'affichage
 
 - Page d'un coffre : les cases vides étaient plus grandes que les autres et la grille se déformait (téléphone et PC).

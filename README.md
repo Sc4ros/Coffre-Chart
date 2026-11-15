@@ -8,14 +8,7 @@
 <p align="center">
   <b>Tout ce qu'il y a dans tes coffres, partout.</b><br>
   Plugin Minecraft Paper qui compte le contenu des coffres du serveur<br>
-  et l'affiche sur un site pour téléphone et PC, installable sur l'iPhone comme une appli.<br><br>
-  📦 <a href="https://modrinth.com/plugin/coffre-chart"><b>Disponible sur Modrinth</b></a>
-</p>
-
-<p align="center">
-  <a href="https://modrinth.com/plugin/coffre-chart"><img alt="Télécharger sur Modrinth" src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger%20sur-Modrinth-1BD96A?logo=modrinth&logoColor=white"></a>
-  <a href="https://modrinth.com/plugin/coffre-chart"><img alt="Téléchargements" src="https://img.shields.io/modrinth/dt/coffre-chart?logo=modrinth&label=t%C3%A9l%C3%A9chargements&color=1BD96A"></a>
-  <a href="https://modrinth.com/plugin/coffre-chart/versions"><img alt="Version" src="https://img.shields.io/modrinth/v/coffre-chart?label=version&color=1BD96A"></a>
+  et l'affiche sur un site pour téléphone et PC, installable sur l'iPhone comme une appli.
 </p>
 
 <p align="center">
@@ -58,7 +51,8 @@
 - Le contenu des **boîtes de Shulker et des sacs** rangés dans les coffres est compté aussi.
 - **`/coffres chercher diamant`** te dit où sont tes diamants et **fait briller les coffres**.
 - **`/coffres projet`** montre tes **projets de construction** et les blocs qu'il manque ;
-  **`/coffres projet lier <nom>`** puis un clic droit lie des coffres à un projet.
+  **`/coffres projet lier <nom>`** puis un clic droit lie des coffres à un projet ;
+  **`/coffres projet placer <nom>`** place le plan à tes pieds pour compter les blocs déjà posés.
 
 ### Sur le site
 Le site a deux parties, qu'on choisit en haut des pages : **Mes coffres** (seulement ceux que tu as ajoutés) et
@@ -95,6 +89,30 @@ Tu prépares un château, une ferme, une base ? Envoie son plan sur le site et C
    puis un clic droit sur les coffres). Leur contenu est compté en direct, shulkers comprises.
 5. Tu vois le **pourcentage réuni**, bloc par bloc ce qu'il **manque** (« 520 · 8 stacks + 8 ») et ce qui traîne
    **ailleurs** dans d'autres coffres. Un bouton copie la liste des manquants pour la coller sur Discord.
+6. **Place le projet dans le monde** (carte « Dans le monde ») : Coffres compte aussi les **blocs déjà posés**.
+
+### Blocs déjà posés
+
+Indique où la construction se trouve, et Coffres regarde dans le monde quels blocs du plan sont déjà là.
+L'avancement devient alors **posé** (vert) + **dans les coffres** (bleu) + **manquant** (gris). Ce qui est posé n'est
+plus demandé dans les coffres : si le mur en pierre est fini, la pierre des coffres ne compte plus pour lui.
+
+- **Où ?** Le monde, les coordonnées de l'**origine**, la **rotation** et le **miroir** :
+  - avec **Litematica**, recopie l'origine du menu de placement du schéma, et la même rotation et le même miroir ;
+  - pour les autres fichiers, l'origine est le coin du plan qui a les plus petits x, y et z ;
+  - le plus simple : tiens-toi sur ce bloc et appuie sur **Utiliser ma position en jeu**, ou tape
+    `/coffres projet placer <nom> [0|90|180|270] [gauche-droite|avant-arriere]`.
+- **Quand ?** Une vérification complète quand on place le projet, avec le bouton **Revérifier** (ou
+  `/coffres projet verifier <nom>`) et toutes les 10 minutes. Entre deux, chaque bloc posé, cassé, brûlé, explosé ou
+  poussé par un piston près de la construction est revu tout de suite.
+- **Un bloc compte** s'il est du **bon type** au bon endroit : un escalier en chêne tourné dans le mauvais sens compte.
+  L'air du plan n'est pas vérifié (un bloc en trop ne gêne pas).
+- Les zones du monde **non chargées** (personne à côté) ne sont jamais chargées exprès : leurs blocs gardent leur
+  dernier état connu, et le site dit combien n'ont pas pu être vérifiés.
+- Le créateur du projet (ou un admin) le place ou le déplace ; tous ceux qui peuvent lier des coffres peuvent le
+  revérifier. Déplacer le projet recommence la vérification à zéro.
+- Les `.schematic` d'avant Minecraft 1.13 ne permettent pas cette vérification. Les projets créés avant la version
+  1.3.0 doivent renvoyer leur fichier une fois (Modifier → Remplacer le fichier).
 
 | Fichier | Programme | Notes |
 |---|---|---|
@@ -109,7 +127,8 @@ plantées sont des carottes ; un pot de fleurs avec un coquelicot donne un pot +
 un seau d'eau (l'eau qui coule est ignorée). L'air, les portails et le feu sont ignorés. Le contenu des coffres et les
 entités (cadres, armures) dessinés dans le plan ne sont pas comptés.
 
-Le fichier n'est pas gardé : seule la liste des blocs l'est (`projects.json`). Seuls les coffres que *tu* as le droit
+Le fichier envoyé n'est pas gardé tel quel : la liste des blocs va dans `projects.json`, et la position de chaque bloc
+(pour les blocs déjà posés) dans `plans/`. Seuls les coffres que *tu* as le droit
 de voir comptent pour toi : un coffre privé lié par quelqu'un d'autre n'affiche pas son contenu.
 
 En jeu, `/coffres projet` ouvre la liste des projets avec une barre d'avancement ; dans un projet, chaque bloc indique
@@ -142,11 +161,9 @@ Pour essayer : [`docs/exemples/`](docs/exemples/) contient une petite maison en 
 
 ## Installation
 
-**Prérequis :** un serveur **Paper** ou **Purpur 26.2** (ou plus récent) qui tourne avec **Java 25**.
-Spigot, Bukkit et Folia ne sont pas pris en charge.
+**Prérequis :** un serveur **Paper 26.2** (ou plus récent) qui tourne avec **Java 25**.
 
-1. Télécharge la dernière version sur **[Modrinth](https://modrinth.com/plugin/coffre-chart/versions)**
-   (ou `Coffres-1.2.1.jar` dans le dossier [`release/`](release/) et l'onglet **Releases** de GitHub).
+1. Télécharge `Coffres-1.3.0.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
 2. Mets-le dans le dossier `plugins/` du serveur et démarre le serveur.
 3. **Ouvre le port du site (8125 par défaut).** C'est un port en plus de celui de Minecraft :
    - serveur chez toi : redirige le port **TCP 8125** de ta box vers la machine du serveur ;
@@ -200,6 +217,8 @@ l'écran d'accueil a sa propre session, séparée de Safari.
 | `/coffres projet` | Les projets de construction et leur avancement (menu) |
 | `/coffres projet <nom>` | Les blocs qu'il manque pour ce projet (clic = faire briller les coffres qui en ont) |
 | `/coffres projet lier <nom>` | Clic droit sur des coffres pour les lier au projet (ou les délier) |
+| `/coffres projet placer <nom> [rotation] [miroir]` | Le plan commence au bloc où tu te tiens : Coffres compte les blocs déjà posés (créateur du projet ou admin) |
+| `/coffres projet verifier <nom>` | Revérifie tous les blocs posés de ce projet |
 | `/coffres nom <nom>` | Renomme le coffre que tu regardes (ou celui que tu viens d'ajouter) |
 | `/coffres zone <zone>` | Range le coffre dans une zone. `/coffres zone -` pour l'enlever |
 | `/coffres prive` | Remet en privé le coffre commun que tu regardes |
@@ -306,7 +325,8 @@ Le site est servi par le serveur HTTP intégré à Java : **aucune dépendance**
 |---|---|
 | `plugins/Coffres/chests.json` | Les coffres suivis et leur dernier contenu |
 | `plugins/Coffres/history.jsonl` | L'historique (une ligne par mouvement) |
-| `plugins/Coffres/projects.json` | Les projets : blocs nécessaires et coffres liés (les fichiers envoyés ne sont pas gardés) |
+| `plugins/Coffres/projects.json` | Les projets : blocs nécessaires, coffres liés, emplacement dans le monde |
+| `plugins/Coffres/plans/` | La position de chaque bloc des plans (`.plan`) et les blocs déjà posés (`.placed`) |
 | `plugins/Coffres/sessions.json` | Les connexions au site (empreintes des jetons uniquement) |
 | `plugins/Coffres/cache/` | Textures et noms d'objets téléchargés depuis Mojang |
 
@@ -330,6 +350,8 @@ Ce que Coffres **ne compte pas** : le coffre de l'Ender (il est personnel) et le
 
 ## Pour les développeurs
 
+L'histoire du projet, les choix faits et les pièges connus sont dans [`historique.md`](historique.md).
+
 ### Compiler
 
 ```bash
@@ -348,7 +370,8 @@ automatiquement (voir [`.github/workflows/build.yml`](.github/workflows/build.ym
 ./gradlew runDev
 ```
 
-Lance uniquement le site avec des **données de démonstration** (17 coffres, 5 joueurs, 3 projets, 3 semaines d'historique,
+Lance uniquement le site avec des **données de démonstration** (17 coffres, 5 joueurs, 4 projets dont la petite maison
+placée dans le monde, 3 semaines d'historique,
 des mouvements en direct). Ouvre le lien affiché dans la console. Les fichiers du site sont relus à chaque requête :
 modifie-les et recharge la page.
 
@@ -362,11 +385,12 @@ src/main/java/fr/coffres/
 ├── LinkMode.java             mode ajout (et liaison à un projet)
 ├── ProjectsInGame.java       /coffres projet, lier des coffres au clic droit
 ├── Msg.java                  messages (MiniMessage)
-├── model/                    StoredChest, SlotItem, LogEntry, Project
-├── store/                    DataStore (coffres, historique), ProjectStore (projets)
-├── project/                  lecture des plans (NBT, Litematica, Sponge, MCEdit, structures), blocs → objets, avancement
+├── model/                    StoredChest, SlotItem, LogEntry, Project, Placement (emplacement + rotation)
+├── store/                    DataStore (coffres, historique), ProjectStore (projets), PlanStore (plans/, blocs posés)
+├── project/                  lecture des plans (NBT, Litematica, Sponge, MCEdit, structures), blocs → objets,
+│                             Plan (position de chaque bloc), Build (blocs posés), avancement
 ├── track/                    suivi des coffres (événements, comparaison, coffres doubles)
-├── game/                     Locator (surbrillance), BukkitBridge (lien site ↔ jeu)
+├── game/                     Locator (surbrillance), BukkitBridge (lien site ↔ jeu), BuildScanner (blocs posés)
 └── web/                      serveur HTTP, API, connexion, textures Mojang
 src/main/resources/web/       le site (HTML, CSS, JavaScript sans framework)
 src/test/java/fr/coffres/     tests + serveur de démonstration
@@ -399,6 +423,8 @@ Toutes les réponses sont en JSON. Les routes marquées 🔒 demandent l'en-têt
 | 🔒 `GET` · `POST /api/project/{id}` | Un projet (blocs, coffres liés, coffres proposés) / le modifier `{name, shared}` |
 | 🔒 `POST /api/project/{id}/chests` `{chests:[…]}` | Choisir les coffres liés |
 | 🔒 `POST /api/project/{id}/file?file=` | Remplacer le plan (corps : le fichier brut) |
+| 🔒 `POST /api/project/{id}/placement` `{world, x, y, z, rot, mirror}` | Placer le projet dans le monde. `{here: true, rot, mirror}` = à la position du joueur, `{remove: true}` = le retirer |
+| 🔒 `POST /api/project/{id}/scan` | Revérifier les blocs posés |
 | 🔒 `POST /api/project/{id}/delete` | Supprimer le projet |
 
 ### Crédits
