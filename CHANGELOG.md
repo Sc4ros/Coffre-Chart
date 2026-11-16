@@ -1,5 +1,44 @@
 # Changements
 
+## 1.5.1 — Inventaires partout
+
+- Correctif : les blocs que portent les membres d'un projet n'étaient comptés que si le projet était **placé dans le
+  monde** et que le joueur était **à moins de 64 blocs** du chantier. Ils comptent maintenant **partout**, que le projet
+  soit placé ou non.
+- Tout l'inventaire est lu : main gauche, **shulkers** et **bundles** compris (aussi une shulker tenue en main gauche).
+- Sur le site, la tuile et la colonne « Inventaires » s'affichent pour tous les projets, avec qui porte quoi.
+- Réglage : `projects.inventory-radius` est remplacé par `projects.count-inventories: true`.
+
+## 1.5.0 — Groupes d'amis
+
+- Un projet peut maintenant être **Commun** (tout le serveur), **Groupe d'amis** ou **Solo** (toi seul).
+- **Groupes réutilisables** : bouton **Groupes** sur la page des projets. On crée un groupe une fois (« Les potes »),
+  on y ajoute des joueurs déjà venus sur le serveur, puis on le choisit pour autant de projets qu'on veut.
+  Ajouter quelqu'un au groupe lui ouvre tous ses projets.
+- Un projet de groupe n'est vu que par les membres du groupe (et les admins). Les membres peuvent **lier leurs coffres**
+  et **revérifier** les blocs posés ; seul le créateur du projet (ou un admin) le renomme, le place, remplace le
+  fichier ou le supprime. Seul le créateur du groupe (ou un admin) ajoute, retire, renomme ou supprime le groupe ;
+  chaque membre peut le **quitter**. Supprimer un groupe fait passer ses projets en solo.
+- Les coffres privés restent privés : un coffre privé lié à un projet de groupe ne compte que pour son propriétaire,
+  comme avant.
+- **Inventaires près du chantier** : seuls les membres du projet comptent. Projet commun = tout le monde, projet de
+  groupe = les membres du groupe, projet solo = son créateur.
+- En jeu, les menus affichent « Groupe « Les potes » » et suivent les mêmes règles.
+- Téléphone : les boutons en haut de la page des projets passent sous le titre au lieu de l'écraser.
+
+## 1.4.0 — Les inventaires comptent aussi
+
+- Nouvelle ligne **« Dans les inventaires »** pour les projets placés dans le monde : les blocs du plan que portent les
+  joueurs **en ligne et près de la construction** (64 blocs autour, réglable) comptent dans l'avancement, shulkers
+  comprises. Avant, sortir des blocs d'un coffre lié faisait baisser le pourcentage tant qu'ils n'étaient pas posés.
+- L'ordre de calcul : d'abord ce qui est **posé**, puis les **coffres liés**, puis les **inventaires**. Un bloc en trop
+  dans une poche ne compte jamais.
+- Le site : une part **orange** dans l'anneau et dans la légende, une tuile « Dans les inventaires » (avec qui les
+  porte), des barres en trois couleurs, « 5 posés + 0 en coffre + 6 sur les joueurs / 16 », une colonne « Inventaires »
+  dans le tableau, et dans la carte « Dans le monde » : « Sur les joueurs près du chantier : Steve 46 · Alex 12 ».
+- En jeu : les menus et le message de fin de vérification affichent aussi le pourcentage dans les inventaires.
+- Nouveau réglage `projects.inventory-radius` (64 ; 0 = ne pas compter les inventaires).
+
 ## 1.3.0 — Blocs déjà posés
 
 - **Un projet peut être placé dans le monde** : monde, coordonnées de l'origine, rotation (0°, 90°, 180°, 270°) et

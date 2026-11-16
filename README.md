@@ -83,7 +83,8 @@ s'afficher en tableau.
 Tu prépares un château, une ferme, une base ? Envoie son plan sur le site et Coffres fait la liste de courses.
 
 1. Sur le site, onglet **Projets** → **Nouveau projet**, puis choisis (ou glisse) ton fichier.
-2. Donne-lui un nom et choisis **Commun** (tout le serveur le voit et peut y lier ses coffres) ou **Solo** (toi seul).
+2. Donne-lui un nom et choisis **Commun** (tout le serveur le voit et peut y lier ses coffres), **Groupe d'amis**
+   (seuls les membres d'un de tes groupes) ou **Solo** (toi seul).
 3. Coffres compte **tous les blocs qu'il faut** : un graphique des matériaux, le total, l'équivalent en stacks et en shulkers.
 4. **Lie les coffres** où tu ranges les matériaux (sur le site en cochant, ou en jeu avec `/coffres projet lier <nom>`
    puis un clic droit sur les coffres). Leur contenu est compté en direct, shulkers comprises.
@@ -94,8 +95,14 @@ Tu prépares un château, une ferme, une base ? Envoie son plan sur le site et C
 ### Blocs déjà posés
 
 Indique où la construction se trouve, et Coffres regarde dans le monde quels blocs du plan sont déjà là.
-L'avancement devient alors **posé** (vert) + **dans les coffres** (bleu) + **manquant** (gris). Ce qui est posé n'est
-plus demandé dans les coffres : si le mur en pierre est fini, la pierre des coffres ne compte plus pour lui.
+L'avancement devient alors **posé** (vert) + **dans les coffres** (bleu) + **dans les inventaires** (orange) +
+**manquant** (gris). Ce qui est posé n'est plus demandé dans les coffres : si le mur en pierre est fini, la pierre des
+coffres ne compte plus pour lui.
+
+- **Les inventaires :** les blocs du projet que portent ses membres en ligne (tout le monde pour un projet commun, le
+  groupe pour un projet de groupe, le créateur pour un projet solo) comptent aussi, où qu'ils soient, et même si le
+  projet n'est pas placé dans le monde. Tout l'inventaire est lu, main gauche, shulkers et bundles compris. Ainsi, sortir une stack d'un coffre pour construire ne fait pas baisser le
+  pourcentage. Ils comptent après les blocs posés et les coffres liés, et jamais au-delà de ce qu'il manque.
 
 - **Où ?** Le monde, les coordonnées de l'**origine**, la **rotation** et le **miroir** :
   - avec **Litematica**, recopie l'origine du menu de placement du schéma, et la même rotation et le même miroir ;
@@ -163,7 +170,7 @@ Pour essayer : [`docs/exemples/`](docs/exemples/) contient une petite maison en 
 
 **Prérequis :** un serveur **Paper 26.2** (ou plus récent) qui tourne avec **Java 25**.
 
-1. Télécharge `Coffres-1.3.0.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
+1. Télécharge `Coffres-1.5.1.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
 2. Mets-le dans le dossier `plugins/` du serveur et démarre le serveur.
 3. **Ouvre le port du site (8125 par défaut).** C'est un port en plus de celui de Minecraft :
    - serveur chez toi : redirige le port **TCP 8125** de ta box vers la machine du serveur ;
@@ -252,9 +259,22 @@ Alias : `/coffre`, `/stock`.
 - En passant de la version 1.x à la 1.2, **tous les coffres déjà suivis deviennent privés** (ils étaient publics par
   défaut avant). Chacun peut rendre communs ceux qu'il veut partager.
 - Pour ajouter un coffre, il faut pouvoir l'ouvrir : les **protections de zone** (claims, régions) sont respectées.
-- Un **projet commun** est visible par tous, et chacun peut y lier les coffres qu'il voit. Un **projet solo** n'est
-  visible que par son créateur et les admins. Seul le créateur (ou un admin) peut renommer, remplacer le fichier ou
-  supprimer un projet. Chaque joueur peut créer jusqu'à 15 projets (réglable).
+- Un **projet commun** est visible par tous, et chacun peut y lier les coffres qu'il voit. Un **projet de groupe**
+  n'est visible que par les membres du groupe choisi (et les admins), qui peuvent y lier leurs coffres et revérifier
+  les blocs posés. Un **projet solo** n'est visible que par son créateur et les admins. Seul le créateur (ou un admin)
+  peut renommer, placer, remplacer le fichier ou supprimer un projet. Chaque joueur peut créer jusqu'à 15 projets
+  (réglable).
+- Un coffre privé lié à un projet commun ou de groupe ne compte **que pour son propriétaire**. Pour que les autres le
+  voient, il faut le rendre commun.
+
+### Groupes d'amis
+
+Sur le site, page **Projets** → bouton **Groupes** :
+- **Créer** un groupe (20 par joueur), puis **ajouter** des joueurs par leur pseudo. Seuls les joueurs déjà venus sur
+  le serveur peuvent être ajoutés, sans invitation à accepter.
+- Choisir ce groupe dans **Qui le voit** en créant un projet, ou dans **Modifier** pour un projet existant.
+- Le créateur du groupe (ou un admin) ajoute, retire, renomme et supprime le groupe ; chaque membre peut le quitter.
+  Supprimer un groupe fait passer ses projets en solo.
 
 ---
 
@@ -327,6 +347,7 @@ Le site est servi par le serveur HTTP intégré à Java : **aucune dépendance**
 | `plugins/Coffres/history.jsonl` | L'historique (une ligne par mouvement) |
 | `plugins/Coffres/projects.json` | Les projets : blocs nécessaires, coffres liés, emplacement dans le monde |
 | `plugins/Coffres/plans/` | La position de chaque bloc des plans (`.plan`) et les blocs déjà posés (`.placed`) |
+| `plugins/Coffres/groups.json` | Les groupes d'amis et les pseudos des joueurs déjà venus sur le serveur |
 | `plugins/Coffres/sessions.json` | Les connexions au site (empreintes des jetons uniquement) |
 | `plugins/Coffres/cache/` | Textures et noms d'objets téléchargés depuis Mojang |
 
@@ -385,8 +406,9 @@ src/main/java/fr/coffres/
 ├── LinkMode.java             mode ajout (et liaison à un projet)
 ├── ProjectsInGame.java       /coffres projet, lier des coffres au clic droit
 ├── Msg.java                  messages (MiniMessage)
-├── model/                    StoredChest, SlotItem, LogEntry, Project, Placement (emplacement + rotation)
-├── store/                    DataStore (coffres, historique), ProjectStore (projets), PlanStore (plans/, blocs posés)
+├── model/                    StoredChest, SlotItem, LogEntry, Project, Placement (emplacement + rotation), Group
+├── store/                    DataStore (coffres, historique), ProjectStore (projets), PlanStore (plans/, blocs posés),
+│                             GroupStore (groupes d'amis, joueurs déjà venus)
 ├── project/                  lecture des plans (NBT, Litematica, Sponge, MCEdit, structures), blocs → objets,
 │                             Plan (position de chaque bloc), Build (blocs posés), avancement
 ├── track/                    suivi des coffres (événements, comparaison, coffres doubles)
@@ -419,13 +441,18 @@ Toutes les réponses sont en JSON. Les routes marquées 🔒 demandent l'en-têt
 | 🔒 `GET /api/activity?kind=&player=&item=&chest=&before=` | Historique |
 | 🔒 `GET /api/players?days=30` | Statistiques par joueur |
 | 🔒 `GET /api/projects` | Les projets visibles et leur avancement |
-| 🔒 `POST /api/projects/upload?name=&shared=1&file=` | Crée un projet. Corps : le fichier brut (`application/octet-stream`) |
-| 🔒 `GET` · `POST /api/project/{id}` | Un projet (blocs, coffres liés, coffres proposés) / le modifier `{name, shared}` |
+| 🔒 `POST /api/projects/upload?name=&vis=all\|group\|solo&group=&file=` | Crée un projet. Corps : le fichier brut (`application/octet-stream`) |
+| 🔒 `GET` · `POST /api/project/{id}` | Un projet (blocs, coffres liés, coffres proposés) / le modifier `{name, visibility: "all"\|"group"\|"solo", group}` |
 | 🔒 `POST /api/project/{id}/chests` `{chests:[…]}` | Choisir les coffres liés |
 | 🔒 `POST /api/project/{id}/file?file=` | Remplacer le plan (corps : le fichier brut) |
 | 🔒 `POST /api/project/{id}/placement` `{world, x, y, z, rot, mirror}` | Placer le projet dans le monde. `{here: true, rot, mirror}` = à la position du joueur, `{remove: true}` = le retirer |
 | 🔒 `POST /api/project/{id}/scan` | Revérifier les blocs posés |
 | 🔒 `POST /api/project/{id}/delete` | Supprimer le projet |
+| 🔒 `GET /api/groups` | Mes groupes d'amis (tous pour les admins) et les pseudos qu'on peut ajouter |
+| 🔒 `POST /api/groups/create` `{name}` | Créer un groupe |
+| 🔒 `POST /api/group/{id}` `{name}` | Renommer le groupe (créateur ou admin) |
+| 🔒 `POST /api/group/{id}/add` `{name}` · `/remove` `{uuid}` | Ajouter un joueur / retirer un membre (ou se retirer soi-même) |
+| 🔒 `POST /api/group/{id}/delete` | Supprimer le groupe (ses projets passent en solo) |
 
 ### Crédits
 

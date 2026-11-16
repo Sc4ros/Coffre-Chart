@@ -11,8 +11,8 @@ Le mode d'emploi pour les joueurs et les admins est dans [`README.md`](README.md
 
 ## Où en est le projet
 
-- **Version actuelle : 1.3.0** (`release/Coffres-1.3.0.jar`).
-- Compile, et les **21 tests** passent (BuildTest 6, CoreTest 6, ProjectTest 7, VisibilityTest 2).
+- **Version actuelle : 1.5.1** (`release/Coffres-1.5.1.jar`).
+- Compile, et les **24 tests** passent (BuildTest 6, CoreTest 6, GroupTest 3, ProjectTest 7, VisibilityTest 2).
 - Le **site** a été testé dans un navigateur avec les données de démonstration (`./gradlew runDev`), sur téléphone et PC.
 - **Pas encore testé sur un vrai serveur Minecraft** : tout ce qui se passe en jeu (voir « Pas encore fait » en bas).
 
@@ -287,6 +287,91 @@ le faux jeu « construit » 10 % de plus à chaque « Revérifier ».
 **Piège rencontré :** dans `projects.js`, une variable `built` existait déjà (page construite) ; en déclarer une autre
 plus bas cassait toute la page (« Cannot access 'built' before initialization »). Renommée `finished`.
 
+### 16 novembre 2026 : version 1.4.0, les inventaires comptent aussi
+
+**Retour de l'utilisateur après avoir publié la 1.3.0 :** « tout marche correctement », mais sur une grosse
+construction le total est passé de 54 % à 52 % quand ils ont posé des blocs, ce qui leur semblait illogique.
+
+**Explication donnée :** le calcul posé + coffres ne baisse pas quand on pose un bloc sorti d'un coffre lié. La baisse
+venait des blocs sortis des coffres et encore dans les inventaires (non comptés), ou de blocs posés qui ne collent pas
+au plan (mauvais endroit, mauvais type, zone non chargée).
+
+**Demande :** ajouter une ligne « dans les inventaires », et une part pour elle dans le graphique.
+
+**Fait :**
+- `Build.setCarried / carried / carriers` : les objets du plan portés par les joueurs près du chantier.
+- `BuildScanner.inventories()`, une fois par seconde : joueurs en ligne du même monde, hors spectateurs, à moins de
+  `projects.inventory-radius` blocs (64) de la boîte du chantier ; inventaire + main gauche, shulkers et bundles lus
+  avec `Snapshot` ; seuls les objets dont le plan a besoin sont gardés.
+- `ProjectProgress.Line` a `carried` ; `inInventories() = min(carried, need − placed − useful)`. Ordre : posé, coffres,
+  inventaires. `carriedRatio`, `carriedPercent` ; `chestPercent` est maintenant calculé sur posé + coffres.
+- Site : `ring2(..., {inv})` ajoute un arc orange (`--warn`), légende « Inventaires », tuile « Dans les inventaires »
+  (pourcentage + qui), 6 tuiles sur 3 colonnes (`.tiles.six`), barres à 3 couleurs, colonne du tableau, ligne
+  « Sur les joueurs près du chantier » dans la carte « Dans le monde ».
+- Menus en jeu et message de fin de vérification : pourcentage des inventaires.
+- Choix fait sans demander : seulement les projets **placés** dans le monde (il faut savoir où est le chantier), et
+  seulement les joueurs **près** du chantier.
+
+**Vérifié :** nouveau cas dans `BuildTest` (posé 5 + 12 en poche pour 10 → 5 comptés, 0 manquant) ; 21 tests passent.
+Sur le site de démo : 39 % posé + 18 % coffres + 14 % inventaires = 71 %, anneau à trois couleurs, tuiles lisibles.
+**Pas testé sur un vrai serveur Paper.**
+
+### 16 novembre 2026 : version 1.5.0, les groupes d'amis
+
+**Demande :** que seuls les membres du projet comptent avec leur inventaire, et pouvoir faire des projets avec des
+groupes d'amis : « soit avec tout le monde, soit avec des groupes d'amis, soit tout seul ».
+
+**Choix faits avec l'utilisateur :**
+- groupes **réutilisables** (créés une fois, choisis pour plusieurs projets), pas des membres projet par projet ;
+- **ajout direct** par le créateur du groupe (joueur déjà venu sur le serveur), pas d'invitation ; on peut quitter ;
+- un coffre **privé** lié à un projet de groupe ne compte **que pour son propriétaire** (comme avant) ;
+- les membres peuvent **lier leurs coffres et revérifier** ; le reste (nom, placement, fichier, suppression, groupe)
+  reste au créateur du projet ou aux admins.
+
+**Fait :**
+- `model/Group` (créateur + `members`), `store/GroupStore` → `groups.json` : groupes et pseudos des joueurs déjà venus
+  (`seen()` à chaque connexion, au démarrage pour les joueurs en ligne, et rempli au départ avec les sessions du site).
+  Limites : 20 groupes par joueur, 50 membres par groupe. `GroupStore` ne prend jamais d'autre verrou.
+- `Project.group` : `shared` = commun ; sinon `group` = groupe ; sinon solo. `ProjectStore.setVisibility`,
+  `clearGroup` (groupe supprimé → projets en solo), `countInGroup`.
+- `Api.canSee` / `canLink` ne sont plus statiques (ils ont besoin des groupes) ; `visibility()` → "all", "group",
+  "solo" ; `groups()` pour le site. `WebServer` : `checkVisibility`, routes `groups`, `groups/create`,
+  `group/{id}[/add|/remove|/delete]`, `vis` + `group` à l'envoi d'un plan, `{visibility, group}` dans « Modifier ».
+- `ProjectsInGame.canSee/canLink/visibilityText/people` (plus statiques), menus mis à jour.
+- `BuildScanner.inventories()` : seulement les joueurs de `people(projet)` (null = tout le monde pour un projet commun).
+- Site : `js/pages/groups.js` (`visibilityPicker`, `groupsSheet`), bouton **Groupes** sur la page des projets,
+  « Groupe « … » · par … » sur les cartes. Correctif téléphone : les boutons d'en-tête passent sous le titre.
+- Démo : Alex a un groupe « Les potes » avec Steve, et sa ferme à fer est un projet de ce groupe.
+
+**Vérifié :** `GroupTest` (pseudos, ajout, changement de pseudo suivi, qui voit un projet de groupe, suppression du
+groupe, retour en commun) ; 23 tests passent. Sur le site de démo : créer un groupe, ajouter Lea_mc et Alex, refus de
+« Bob » jamais venu, passer la petite maison en groupe ; connecté en Alex (non admin) : il voit les projets de ses
+groupes, peut lier (`canLink`), ne peut pas modifier le projet de Steve (403), ne peut pas quitter son propre groupe.
+**Pas testé sur un vrai serveur Paper.**
+
+### 16 novembre 2026 : version 1.5.1, les inventaires comptent partout
+
+**Retour :** « mon ami Arthur a de la terre cuite qu'il faut et ça ne la met pas dans l'inventaire », avec l'idée que
+seuls les objets sortis d'un coffre du projet seraient comptés, et la demande de regarder aussi dans les shulkers.
+
+**Cause trouvée :** l'inventaire était bien lu directement (shulkers et bundles compris, quelle que soit l'origine des
+objets). Mais il ne comptait que pour un projet **placé dans le monde**, et seulement pour les joueurs **à moins de
+64 blocs** du chantier. Arthur était donc hors de cette zone, ou le projet n'était pas placé.
+
+**Fait :**
+- Les objets portés ne sont plus rangés dans `Build` mais dans `PlanStore` (`Carried`, `carried(id)`, `setCarried`,
+  `keepCarried`), pour **tous** les projets, placés ou non.
+- `BuildScanner.inventories()` tourne chaque seconde même sans projet placé. Chaque joueur en ligne (sauf spectateur)
+  est lu une fois (rangement + main gauche, shulkers et bundles dedans), puis compté pour chaque projet dont il est
+  membre (`people()`), sans limite de distance ni de monde. On ne garde que les objets de `Project.materials`.
+- Réglage `projects.count-inventories` (true par défaut) à la place de `inventory-radius` (l'ancienne clé est ignorée).
+- Site : anneau à 3 couleurs, tuile « Dans les inventaires », colonne « Inventaires » et « Sur les joueurs en ligne »
+  pour tous les projets ; « Posé » seulement pour un projet placé. `carriers` est maintenant à la racine du détail.
+
+**Vérifié :** nouveau test `GroupTest.inventoriesCountEvenWhenTheProjectIsNotPlaced` ; 24 tests passent. Site de démo :
+petite maison retirée du monde, les 58 blocs de Steve et Alex restent comptés (14 %). **Pas testé sur un vrai serveur.**
+- Pas fait (non demandé) : compter le coffre de l'Ender des joueurs.
+
 ---
 
 ## Notes techniques pour reprendre
@@ -346,6 +431,8 @@ plus bas cassait toute la page (« Cannot access 'built' before initialization �
 ## Pas encore fait, pas encore testé
 
 - **Rien n'a été essayé sur un vrai serveur Paper.** À tester en jeu :
+  - les groupes (1.5.0) : un membre voit les projets du groupe dans `/coffres projet`, peut lier ses coffres ;
+  - les inventaires près du chantier (1.4.0) : que le pourcentage ne baisse plus quand on sort des blocs ;
   - les blocs déjà posés (1.3.0) : `/coffres projet placer`, que l'origine et la rotation collent bien à Litematica,
     la mise à jour en direct quand on pose/casse, le temps de calcul sur un gros plan ;
   - les menus et `/coffres projet` ;
@@ -356,6 +443,7 @@ plus bas cassait toute la page (« Cannot access 'built' before initialization �
 - La bande sous la barre d'état n'a pas été vue sur un vrai iPhone. Le site n'a été testé que dans Chromium.
 - Blocs posés : l'orientation n'est volontairement pas vérifiée. Les changements faits par WorldEdit ne sont vus qu'à
   la vérification suivante (toutes les 10 minutes ou avec « Revérifier »).
+- Groupes : pas de commande en jeu pour les gérer (tout se fait sur le site).
 - Idée non demandée et non faite : afficher en jeu le contour du projet placé, ou les blocs manquants en surbrillance.
 - Idée non demandée et non faite : un bouton pour rendre communs plusieurs coffres d'un coup. Aujourd'hui, c'est un
   par un sur la page de chaque coffre.
