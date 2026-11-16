@@ -549,6 +549,16 @@ code, kbd { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; fo
 .legend3 i.pl { background: var(--good); }
 .legend3 i.ch { background: var(--accent); }
 .legend3 i.iv { background: var(--warn); }
+/* Project card: the parts of the ring, with their colours */
+.project-card .co.parts { white-space: normal; display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 2px; }
+.project-card .co.parts span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.project-card .co.parts i { width: 8px; height: 8px; border-radius: 2px; background: var(--fill-2); }
+.project-card .co.parts i.pl { background: var(--good); }
+.project-card .co.parts i.ch { background: var(--accent); }
+.project-card .co.parts i.iv { background: var(--warn); }
+.project-card .foot { display: flex; min-width: 0; }
+.project-card .foot .file { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.project-card .foot span:not(.file) { flex: none; }
 .tile .v.inv { color: var(--warn); }
 @media (min-width: 640px) { .tiles.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .carriers { margin-top: 10px; font-size: 13.5px; color: var(--text-2); }
@@ -591,6 +601,16 @@ select.input { appearance: none; -webkit-appearance: none; cursor: pointer; }
 .member .icon-btn { width: 30px; height: 30px; color: var(--bad); }
 .member .icon-btn svg { width: 16px; height: 16px; }
 .group-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+/* One block in a project */
+.item-sheet .ish-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.item-sheet .ish-head .main-col { flex: 1; min-width: 0; }
+.item-sheet .ish-head .note { margin-bottom: 6px; }
+.item-sheet .ish-pct { font-weight: 700; font-size: 20px; flex: none; }
+.item-sheet .ish-sec { margin-top: 16px; }
+.item-sheet .ish-sec h3 { font-size: 15px; font-weight: 650; margin: 0 0 6px; }
+.item-sheet .list { background: var(--surface-2); border-radius: 14px; overflow: hidden; }
+.item-sheet .row { padding: 8px 12px; min-height: 46px; }
+.item-sheet .tiles.six .tile { min-width: 0; }
 .badge.group { background: rgba(255, 159, 10, .16); color: var(--warn); }
 .row.mat { align-items: center; }
 .row .end .avail { color: var(--accent-text); }

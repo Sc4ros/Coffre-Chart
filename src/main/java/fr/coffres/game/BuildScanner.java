@@ -292,14 +292,16 @@ public final class BuildScanner implements Listener {
                     continue;
                 }
                 long mine = 0;
+                Map<String, Long> what = new HashMap<>();
                 for (Map.Entry<String, Long> e : player.getValue().entrySet()) {
                     if (pr.materials.containsKey(e.getKey())) {
                         sum.merge(e.getKey(), e.getValue(), Long::sum);
+                        what.put(e.getKey(), e.getValue());
                         mine += e.getValue();
                     }
                 }
                 if (mine > 0) {
-                    who.add(new Build.Carrier(names.get(player.getKey()), mine));
+                    who.add(new Build.Carrier(names.get(player.getKey()), mine, what));
                 }
             }
             who.sort((a, c) -> Long.compare(c.items(), a.items()));

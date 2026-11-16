@@ -30,8 +30,15 @@ public final class Build {
     private boolean dirty;
     private long version;
 
-    /** A member of the project online and how many items of the project they carry. */
-    public record Carrier(String name, long items) {
+    /** A member of the project online, how many items of the project they carry, and which ones. */
+    public record Carrier(String name, long items, java.util.Map<String, Long> what) {
+        public Carrier {
+            what = what == null ? java.util.Map.of() : java.util.Map.copyOf(what);
+        }
+
+        public Carrier(String name, long items) {
+            this(name, items, java.util.Map.of());
+        }
     }
 
     // Status of the last full check, for the site.

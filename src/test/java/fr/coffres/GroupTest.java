@@ -133,6 +133,16 @@ class GroupTest {
         assertEquals(70L, seen.get("missing"));
         assertEquals(List.of(Map.of("name", "Arthur", "n", 30L)), seen.get("carriers"));
 
+        // The block page of the project says who carries this block.
+        plans.setCarried(p.id, Map.of("terracotta", 30L), List.of(
+                new fr.coffres.project.Build.Carrier("Arthur", 30, Map.of("terracotta", 30L)),
+                new fr.coffres.project.Build.Carrier("Lea", 5, Map.of("stone", 5L))));
+        Map<String, Object> item = api.projectItem(session(LEA, false), p.id, "terracotta");
+        assertEquals(List.of(Map.of("name", "Arthur", "n", 30L)), item.get("who"), "Lea carries no terracotta");
+        assertEquals(30L, item.get("inv"));
+        assertEquals(70L, item.get("missing"));
+        assertNull(api.projectItem(session(LEA, false), p.id, "diamond_block"), "not in the project");
+
         assertTrue(plans.setCarried(p.id, Map.of(), List.of()));
         assertEquals(0L, api.project(session(LEA, false), p.id).get("carried"));
     }

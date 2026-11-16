@@ -1,10 +1,10 @@
 // Projets: send a building plan (.litematic, .schem, .schematic, .nbt), see every block it needs,
 // link the chests where the materials are stored and follow the progress.
-import { h, icon, fmt, compact, plural, store, debounce, norm, ago, toast, sheet, stacks, dimName } from '../util.js';
+import { h, icon, fmt, compact, plural, store, debounce, norm, ago, toast, sheet, stacks, dimName, avatar } from '../util.js';
 import { api, session } from '../api.js';
 import { itemIcon, itemName, initAssets } from '../icons.js';
 import { wheel, ring, ring2, progressBar, table, SERIES, OTHER } from '../charts.js';
-import { header, card, chartCard, segmented, empty, skeleton, errorBox, placeText, locateButton } from '../ui.js';
+import { header, card, chartCard, segmented, empty, skeleton, errorBox, placeText, locateButton, distanceBadge } from '../ui.js';
 import { typeName } from './chests.js';
 import { visibilityPicker, groupsSheet } from './groups.js';
 
@@ -152,13 +152,16 @@ function projectCard(p) {
       h('div', { style: { minWidth: 0, flex: 1 } },
         h('div.nm', p.name),
         h('div.co', ownerText(p)),
-        h('div.co', p.inWorld
-          ? `${p.placedPercent} % posé · ${p.chestPercent} % coffres${p.carried ? ` · ${p.carriedPercent} % inventaires` : ''}`
-          : `${fmt(p.have)} / ${fmt(p.need)} blocs · ${p.chests ? plural(p.chests, 'coffre lié', 'coffres liés') : 'aucun coffre lié'}${p.carried ? ` · ${p.carriedPercent} % inventaires` : ''}`))),
+        p.inWorld || p.carried
+          ? h('div.co.parts',
+            p.inWorld ? h('span', h('i.pl'), `${p.placedPercent} % posé`) : null,
+            h('span', h('i.ch'), `${p.chestPercent} % coffres`),
+            p.carried ? h('span', h('i.iv'), `${p.carriedPercent} % sur les joueurs`) : null)
+          : h('div.co', `${fmt(p.have)} / ${fmt(p.need)} blocs · ${p.chests ? plural(p.chests, 'coffre lié', 'coffres liés') : 'aucun coffre lié'}`))),
     p.top.length
       ? h('div.mini', h('span.lbl', 'Manque'), p.top.map((t) => h('span', { title: itemName(t.id) }, itemIcon(t.id, 's'), compact(t.n))))
       : h('div.mini.done', icon('check'), p.placed >= p.need ? 'Construction terminée' : 'Tous les blocs sont réunis'),
-    h('div.foot', [p.file, sizeText(p), `modifié ${ago(p.updated)}`].filter(Boolean).join(' · ')));
+    h('div.foot', h('span.file', p.file), [sizeText(p), `modifié ${ago(p.updated)}`].filter(Boolean).map((t) => h('span', ' · ' + t))));
 }
 
 export function newProjectButton(cls = 'btn') {
@@ -220,7 +223,59 @@ function tile(label, value, detail, cls) {
   return h('div.tile', h('div.l', label), h('div', { class: 'v ' + (cls || '') }, value), detail ? h('div.d', detail) : null);
 }
 
-function materialRow(l) {
+/** One block as seen in this project: placed, in which linked chests, who carries it, where else it is. */
+function itemSheet(p, l) {
+  sheet(itemName(l.id), (close) => {
+    const body = h('div.item-sheet', h('p.note', 'Chargement…'));
+    const chestRow = (c) => h('a.row', { href: '#/coffre/' + c.id, onclick: () => close() },
+      h('div.ic-box', itemIcon(c.type || 'chest')),
+      h('div.main-col',
+        h('div.title', c.name, c.pub ? null : h('span.lock', ' 🔒')),
+        h('div.meta', `${c.zone ? c.zone + ' · ' : ''}${placeText(c)}`),
+        distanceBadge(c)),
+      h('div.end', h('div.v', fmt(c.count)), c.loose < c.count ? h('div.s', `dont ${fmt(c.count - c.loose)} en shulker`) : null),
+      locateButton([c.id], '', 'icon-btn'));
+    const section = (title, content) => h('div.ish-sec', h('h3', title), content);
+
+    api(`project/${p.id}/item/${l.id}`).then((d) => {
+      const got = d.placed + d.useful + d.inv;
+      const pct = d.need ? Math.floor((got / d.need) * 100) : 100;
+      const extraChests = d.have - d.useful;
+      const extraCarried = d.carried - d.inv;
+      const avail = Math.min(d.missing, d.elsewhere);
+      body.replaceChildren(...[
+        h('div.ish-head', h('div.ic-box', itemIcon(d.id)),
+          h('div.main-col', h('div.note', `Dans le projet « ${d.project} »`),
+            progressBar(d.useful, d.need, d.placed, d.inv)),
+          h('div.ish-pct', d.missing ? `${pct} %` : h('span.ok-pill', icon('check'), d.placed >= d.need ? 'Posé' : 'OK'))),
+        h('div.tiles.six',
+          tile('Il faut', fmt(d.need), stacks(d.need, d.st)),
+          d.inWorld ? tile('Déjà posés', fmt(d.placed), `${d.need ? Math.floor((d.placed / d.need) * 100) : 0} % du plan`, 'placed') : null,
+          tile('Dans les coffres liés', fmt(d.have), extraChests > 0 ? `dont ${fmt(extraChests)} en trop` : stacks(d.have, d.st)),
+          tile('Sur les joueurs', fmt(d.carried), extraCarried > 0 ? `dont ${fmt(extraCarried)} en trop` : stacks(d.carried, d.st), 'inv'),
+          tile('Manque', fmt(d.missing), d.missing ? stacks(d.missing, d.st) || (avail ? `${fmt(avail)} ailleurs` : null) : 'rien !', d.missing ? '' : 'good')),
+        section('Sur les joueurs en ligne', d.who.length
+          ? h('div.list', d.who.map((w) => h('div.row.plain',
+            avatar(w.name),
+            h('div.main-col', h('div.title', w.name), stacks(w.n, d.st) ? h('div.meta', stacks(w.n, d.st)) : null),
+            h('div.end', h('div.v', fmt(w.n))))))
+          : h('p.note', 'Aucun membre du projet en ligne n\'en porte en ce moment.')),
+        section(`Dans les coffres liés${d.chests.length ? ` · ${d.chests.length}` : ''}`, d.chests.length
+          ? h('div.list', d.chests.map(chestRow))
+          : h('p.note', p.chests ? 'Aucun coffre lié n\'en contient.' : 'Aucun coffre n\'est lié à ce projet.')),
+        d.others.length ? section(`Ailleurs, dans des coffres pas liés · ${d.othersCount}`, h('div',
+          h('p.note', { style: { marginBottom: '6px' } }, d.canLink ? 'Ils ne comptent pas pour le projet. Lie-les au projet (bouton « Lier des coffres ») pour les compter.' : 'Ils ne comptent pas pour le projet.'),
+          h('div.list', d.others.map(chestRow)),
+          d.othersCount > d.others.length ? h('p.note', `… et ${d.othersCount - d.others.length} autres.`) : null)) : null,
+        h('div.btns', { style: { marginTop: '16px' } },
+          h('a.btn.plain', { href: '#/objet/' + d.id, onclick: () => close() }, 'Voir partout sur le serveur'),
+          h('button.btn', { type: 'button', onclick: () => close() }, 'Fermer'))].filter(Boolean));
+    }).catch((e) => body.replaceChildren(h('p.err', e.message)));
+    return body;
+  });
+}
+
+function materialRow(l, p) {
   const miss = missingOf(l);
   const done = miss === 0;
   const st = stacks(miss, l.st);
@@ -232,7 +287,7 @@ function materialRow(l) {
     ? [placed ? `${fmt(placed)} posé${placed > 1 ? 's' : ''}` : null, `${fmt(l.have)} en coffre`, inv ? `${fmt(inv)} sur les joueurs` : null]
       .filter(Boolean).join(' + ') + ` / ${fmt(l.need)}`
     : `${fmt(l.have)} / ${fmt(l.need)}`;
-  return h('a.row.mat', { href: '#/objet/' + l.id },
+  return h('button.row.mat', { type: 'button', onclick: () => itemSheet(p, l) },
     h('div.ic-box', itemIcon(l.id)),
     h('div.main-col',
       h('div.title', itemName(l.id)),
@@ -589,7 +644,7 @@ export function projectPage(root, [id]) {
       matsList.replaceChildren(h('p.note', { style: { padding: '6px 16px 14px' } }, msg));
       return;
     }
-    const rows = list.slice(0, shown).map(materialRow);
+    const rows = list.slice(0, shown).map((l) => materialRow(l, data));
     if (list.length > shown) {
       rows.push(h('button.row.plain.more-row', { type: 'button', onclick: () => { shown = Infinity; drawMaterials(); } },
         h('div.main-col', h('div.title', { style: { color: 'var(--accent-text)', textAlign: 'center' } }, `Afficher les ${fmt(list.length - shown)} autres`))));

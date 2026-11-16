@@ -505,7 +505,7 @@ public final class WebServer {
         throw new HttpError(404, "Route inconnue.");
     }
 
-    /** /api/project/{id}[/chests|/file|/placement|/scan|/delete] */
+    /** /api/project/{id}[/chests|/file|/placement|/scan|/delete|/item/{item}] */
     private void handleProject(HttpExchange ex, AuthManager.Session s, String method, Map<String, String> q, String rest)
             throws Exception {
         int slash = rest.indexOf('/');
@@ -517,6 +517,15 @@ public final class WebServer {
         Project p = projects.get(id);
         if (p == null || !api.canSee(p, s)) {
             throw new HttpError(404, "Ce projet n'existe plus ou est privé.");
+        }
+        if (action.startsWith("item/")) {
+            String item = action.substring(5);
+            Map<String, Object> out = item.matches("[a-z0-9_]{1,80}") ? api.projectItem(s, id, item) : null;
+            if (out == null) {
+                throw new HttpError(404, "Ce bloc ne fait pas partie du projet.");
+            }
+            sendJson(ex, 200, out);
+            return;
         }
         switch (action) {
             case "" -> {

@@ -132,7 +132,8 @@ public final class DevServer {
             }
             // Steve and Alex are on the site with some blocks in their pockets.
             plans.setCarried(b.projectId, Map.of("spruce_slab", 40L, "spruce_stairs", 12L, "glass_pane", 6L),
-                    List.of(new Build.Carrier("Steve", 46), new Build.Carrier("Alex", 12)));
+                    List.of(new Build.Carrier("Steve", 46, Map.of("spruce_slab", 40L, "glass_pane", 6L)),
+                            new Build.Carrier("Alex", 12, Map.of("spruce_stairs", 12L))));
         }
 
         @Override

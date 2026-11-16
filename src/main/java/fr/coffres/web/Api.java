@@ -884,6 +884,76 @@ public final class Api {
         }
     }
 
+    /**
+     * One block of a project, as seen in this project: how many are placed, in which linked containers it is, who
+     * carries it, and the other containers (not linked) that hold some. Null when the block is not in the project.
+     */
+    public Map<String, Object> projectItem(AuthManager.Session s, String projectId, String item) {
+        synchronized (store) {
+            synchronized (projects) {
+                Project p = projects.get(projectId);
+                if (p == null || !canSee(p, s) || !p.materials.containsKey(item)) {
+                    return null;
+                }
+                ProjectProgress pr = progress(p, s);
+                ProjectProgress.Line l = null;
+                for (ProjectProgress.Line x : pr.lines) {
+                    if (x.id().equals(item)) {
+                        l = x;
+                    }
+                }
+                if (l == null) {
+                    return null;
+                }
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("id", item);
+                out.put("project", p.name);
+                out.put("need", l.need());
+                out.put("placed", l.placed());
+                out.put("have", l.have());
+                out.put("useful", l.useful());
+                out.put("carried", l.carried());
+                out.put("inv", l.inInventories());
+                out.put("missing", l.missing());
+                out.put("elsewhere", l.elsewhere());
+                out.put("st", l.stack());
+                out.put("inWorld", p.placement != null && p.planBlocks > 0);
+                out.put("canLink", canLink(p, s));
+                java.util.Set<String> linkedIds = new HashSet<>(p.chests);
+                List<Map<String, Object>> linked = new ArrayList<>();
+                List<Map<String, Object>> others = new ArrayList<>();
+                for (StoredChest c : store.chestsLocked()) {
+                    long n = c.totals().getOrDefault(item, 0L);
+                    if (n <= 0 || !visibleAll(c, s)) {
+                        continue;
+                    }
+                    Map<String, Object> m = chestSummary(c, s);
+                    m.put("count", n);
+                    m.put("loose", looseCount(c, item));
+                    (linkedIds.contains(c.id) ? linked : others).add(m);
+                }
+                java.util.Comparator<Map<String, Object>> most = (a, b) -> Long.compare((Long) b.get("count"), (Long) a.get("count"));
+                linked.sort(most);
+                others.sort(most);
+                out.put("chests", linked);
+                out.put("others", others.size() > 10 ? new ArrayList<>(others.subList(0, 10)) : others);
+                out.put("othersCount", others.size());
+                List<Map<String, Object>> who = new ArrayList<>();
+                if (plans != null) {
+                    for (Build.Carrier c : plans.carried(p.id).who()) {
+                        long n = c.what().getOrDefault(item, 0L);
+                        if (n > 0) {
+                            who.add(Map.of("name", c.name(), "n", n));
+                        }
+                    }
+                }
+                who.sort((a, b) -> Long.compare((Long) b.get("n"), (Long) a.get("n")));
+                out.put("who", who);
+                return out;
+            }
+        }
+    }
+
     /** Ids of the containers that stay linked after a player sets the list: the ones they cannot see are kept. */
     public List<String> mergeLinks(AuthManager.Session s, String projectId, List<String> wanted) {
         synchronized (store) {

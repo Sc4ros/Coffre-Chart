@@ -198,10 +198,20 @@ export function plural(n, one, many) { return `${fmt(n)} ${n > 1 ? many : one}`;
 
 export function sheet(title, body, { onClose } = {}) {
   const bg = h('div.sheet-bg', { role: 'dialog', 'aria-modal': 'true', 'aria-label': title });
-  const close = () => { bg.remove(); document.removeEventListener('keydown', esc); onClose && onClose(); };
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    bg.remove();
+    document.removeEventListener('keydown', esc);
+    window.removeEventListener('hashchange', close);
+    onClose && onClose();
+  };
   const esc = (e) => { if (e.key === 'Escape') close(); };
   bg.addEventListener('click', (e) => { if (e.target === bg) close(); });
   document.addEventListener('keydown', esc);
+  // Going to another page (a link, the back button) closes the window instead of leaving it on top of the new page.
+  window.addEventListener('hashchange', close);
   bg.appendChild(h('div.sheet', h('h2', title), typeof body === 'function' ? body(close) : body));
   document.body.appendChild(bg);
   return close;
