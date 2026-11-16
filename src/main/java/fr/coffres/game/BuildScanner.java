@@ -65,6 +65,8 @@ public final class BuildScanner implements Listener {
     private List<Build> active = List.of();
     private int blocksPerTick = 20_000;
     private long rescanMillis = 10 * 60_000L;
+    private boolean countInventories = true;
+    private int invTicks;
     private long nextRescan;
     private boolean changed;
     private int ticks;
@@ -85,7 +87,8 @@ public final class BuildScanner implements Listener {
         this.plans = plans;
     }
 
-    public void configure(int blocksPerTick, int rescanMinutes) {
+    public void configure(int blocksPerTick, int rescanMinutes, boolean countInventories) {
+        this.countInventories = countInventories;
         this.blocksPerTick = Math.max(500, blocksPerTick);
         this.rescanMillis = rescanMinutes <= 0 ? Long.MAX_VALUE : rescanMinutes * 60_000L;
         this.nextRescan = System.currentTimeMillis() + Math.min(rescanMillis, 60_000L);
@@ -115,6 +118,10 @@ public final class BuildScanner implements Listener {
 
     /** Called every tick on the main thread. */
     public void tick() {
+        if (++invTicks >= 20) {
+            invTicks = 0;
+            inventories();
+        }
         active = plans.builds();
         if (active.isEmpty()) {
             dirty.clear();
@@ -228,17 +235,79 @@ public final class BuildScanner implements Listener {
             }
             ProjectProgress progress = plugin.projectsGame().progress(p, pr);
             Msg.send(p, "<gray>Vérification de</gray> <light_purple><project></light_purple> <gray>terminée :</gray> "
-                            + "<green><placed> % posé</green> <dark_gray>·</dark_gray> <aqua><chests> % dans les coffres</aqua> "
-                            + "<dark_gray>·</dark_gray> <white><pct> % au total</white>",
+                            + "<green><placed> % posé</green> <dark_gray>·</dark_gray> <aqua><chests> % coffres</aqua> "
+                            + "<dark_gray>·</dark_gray> <gold><inv> % inventaires</gold> <dark_gray>·</dark_gray> <white><pct> % au total</white>",
                     Placeholder.unparsed("project", pr.name),
                     Placeholder.unparsed("placed", String.valueOf(progress.placedPercent())),
                     Placeholder.unparsed("chests", String.valueOf(progress.chestPercent())),
+                    Placeholder.unparsed("inv", String.valueOf(progress.carriedPercent())),
                     Placeholder.unparsed("pct", String.valueOf(progress.percent())));
             if (s.unloaded > 0) {
                 Msg.raw(p, "  <dark_gray>" + Msg.number(s.unloaded) + " bloc(s) dans des zones non chargées n'ont pas pu être vérifiés : "
                         + "approche-toi de la construction puis relance</dark_gray> <white>/coffres projet verifier <name></white>",
                         Placeholder.unparsed("name", pr.name));
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ inventories of the members
+
+    /**
+     * Every second: the items of each project carried by its members online, wherever they are and whether the
+     * project is placed in the world or not. The whole inventory is read, with the off hand and what is inside the
+     * shulker boxes and bundles it holds.
+     */
+    private void inventories() {
+        boolean any = false;
+        // Each player is read once, then counted for every project they are a member of.
+        Map<String, Map<String, Long>> carriedBy = new HashMap<>();
+        Map<String, String> names = new HashMap<>();
+        if (countInventories) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
+                    continue;
+                }
+                org.bukkit.inventory.PlayerInventory inv = p.getInventory();
+                org.bukkit.inventory.ItemStack[] storage = inv.getStorageContents();
+                org.bukkit.inventory.ItemStack[] all = java.util.Arrays.copyOf(storage, storage.length + 1);
+                all[storage.length] = inv.getItemInOffHand();
+                Map<String, Long> totals = fr.coffres.model.StoredChest.computeTotals(
+                        fr.coffres.track.Snapshot.read(all, true, null), true);
+                if (!totals.isEmpty()) {
+                    String uuid = p.getUniqueId().toString();
+                    carriedBy.put(uuid, totals);
+                    names.put(uuid, p.getName());
+                }
+            }
+        }
+        Set<String> ids = new HashSet<>();
+        for (Project pr : plugin.projects().all()) {
+            ids.add(pr.id);
+            Map<String, Long> sum = new HashMap<>();
+            List<Build.Carrier> who = new ArrayList<>();
+            // Shared project: everyone. Group project: the group. Solo: the creator.
+            Set<String> people = carriedBy.isEmpty() ? Set.of() : plugin.projectsGame().people(pr);
+            for (Map.Entry<String, Map<String, Long>> player : carriedBy.entrySet()) {
+                if (people != null && !people.contains(player.getKey())) {
+                    continue;
+                }
+                long mine = 0;
+                for (Map.Entry<String, Long> e : player.getValue().entrySet()) {
+                    if (pr.materials.containsKey(e.getKey())) {
+                        sum.merge(e.getKey(), e.getValue(), Long::sum);
+                        mine += e.getValue();
+                    }
+                }
+                if (mine > 0) {
+                    who.add(new Build.Carrier(names.get(player.getKey()), mine));
+                }
+            }
+            who.sort((a, c) -> Long.compare(c.items(), a.items()));
+            any |= plans.setCarried(pr.id, sum, who);
+        }
+        any |= plans.keepCarried(ids);
+        if (any) {
+            plugin.store().bump();
         }
     }
 

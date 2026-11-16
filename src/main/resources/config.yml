@@ -62,6 +62,9 @@ projects:
   # Au-delà de ce nombre de blocs dans un plan, la vérification des blocs posés est désactivée pour lui
   # (environ 6 octets de mémoire par bloc pour chaque projet placé).
   max-check-blocks: 10000000
+  # Les blocs du projet que portent ses membres en ligne comptent aussi (ligne « Dans les inventaires »),
+  # où qu'ils soient, et même dans les shulkers et les bundles qu'ils portent. false = ne pas les compter.
+  count-inventories: true
 
 assets:
   # Télécharge les textures et les noms d'objets officiels depuis les serveurs de Mojang

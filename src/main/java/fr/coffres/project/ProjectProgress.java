@@ -20,13 +20,19 @@ import java.util.function.Predicate;
 public final class ProjectProgress {
 
     /**
-     * @param placed already placed in the world (at most {@code need})
-     * @param have   in the linked containers (may be more than what is still needed)
+     * @param placed  already placed in the world (at most {@code need})
+     * @param have    in the linked containers (may be more than what is still needed)
+     * @param carried in the inventories of the players near the build (may be more than what is still needed)
      */
-    public record Line(String id, long need, long placed, long have, long elsewhere, int stack) {
-        /** Still to place once the containers are emptied. */
+    public record Line(String id, long need, long placed, long have, long carried, long elsewhere, int stack) {
+        /** Still to find once what is placed, in the containers and in the inventories is counted. */
         public long missing() {
-            return Math.max(0, need - placed - have);
+            return Math.max(0, need - placed - useful() - inInventories());
+        }
+
+        /** What the inventories bring, after what is placed and what is in the containers. */
+        public long inInventories() {
+            return Math.max(0, Math.min(carried, need - placed - useful()));
         }
 
         public boolean done() {
@@ -50,29 +56,33 @@ public final class ProjectProgress {
     public final long placed;
     /** In the linked containers, only what is still to place. */
     public final long have;
+    /** In the inventories of the players near the build, only what is still needed. */
+    public final long carried;
     public final int doneKinds;
     /** Linked containers the viewer can see. */
     public final List<StoredChest> linked;
     /** Linked containers the viewer cannot see (private containers of other players), not counted. */
     public final int hiddenLinked;
 
-    private ProjectProgress(List<Line> lines, long need, long placed, long have, int doneKinds, List<StoredChest> linked, int hiddenLinked) {
+    private ProjectProgress(List<Line> lines, long need, long placed, long have, long carried, int doneKinds,
+                            List<StoredChest> linked, int hiddenLinked) {
         this.lines = lines;
         this.need = need;
         this.placed = placed;
         this.have = have;
+        this.carried = carried;
         this.doneKinds = doneKinds;
         this.linked = linked;
         this.hiddenLinked = hiddenLinked;
     }
 
     public long missing() {
-        return Math.max(0, need - placed - have);
+        return Math.max(0, need - placed - have - carried);
     }
 
-    /** Placed + in the containers, 0 to 1. */
+    /** Placed + in the containers + in the inventories, 0 to 1. */
     public double ratio() {
-        return need == 0 ? 1 : (double) (placed + have) / need;
+        return need == 0 ? 1 : (double) (placed + have + carried) / need;
     }
 
     /** Whole percent, rounded down so that 100 % really means "everything is there". */
@@ -88,9 +98,21 @@ public final class ProjectProgress {
         return pct(placedRatio());
     }
 
-    /** What the containers bring, so that placed % + containers % = percent (give or take one for rounding). */
+    public double chestRatio() {
+        return need == 0 ? 0 : (double) have / need;
+    }
+
+    public double carriedRatio() {
+        return need == 0 ? 0 : (double) carried / need;
+    }
+
+    /** What the containers bring, so that placed % + containers % + inventories % = percent. */
     public int chestPercent() {
-        return Math.max(0, percent() - placedPercent());
+        return Math.max(0, pct(placedRatio() + chestRatio()) - placedPercent());
+    }
+
+    public int carriedPercent() {
+        return Math.max(0, percent() - placedPercent() - chestPercent());
     }
 
     private static int pct(double r) {
@@ -104,14 +126,21 @@ public final class ProjectProgress {
      */
     public static ProjectProgress of(Project p, Collection<StoredChest> chests, Predicate<StoredChest> visible,
                                      Map<String, Integer> stackSizes) {
-        return of(p, chests, visible, stackSizes, null);
+        return of(p, chests, visible, stackSizes, null, null);
+    }
+
+    public static ProjectProgress of(Project p, Collection<StoredChest> chests, Predicate<StoredChest> visible,
+                                     Map<String, Integer> stackSizes, Map<String, Long> placedItems) {
+        return of(p, chests, visible, stackSizes, placedItems, null);
     }
 
     /**
-     * @param placedItems items already placed in the world (from the {@link Build}), or null when the plan is not placed
+     * @param placedItems  items already placed in the world (from the {@link Build}), or null when the plan is not placed
+     * @param carriedItems items in the inventories of the players near the build, or null
      */
     public static ProjectProgress of(Project p, Collection<StoredChest> chests, Predicate<StoredChest> visible,
-                                     Map<String, Integer> stackSizes, Map<String, Long> placedItems) {
+                                     Map<String, Integer> stackSizes, Map<String, Long> placedItems,
+                                     Map<String, Long> carriedItems) {
         Set<String> linkedIds = new HashSet<>(p.chests);
         Map<String, Long> inLinked = new HashMap<>();
         Map<String, Long> elsewhere = new HashMap<>();
@@ -139,22 +168,25 @@ public final class ProjectProgress {
         long need = 0;
         long placed = 0;
         long have = 0;
+        long carried = 0;
         int done = 0;
         for (Map.Entry<String, Long> m : p.materials.entrySet()) {
             String id = m.getKey();
             Integer seen = stackSizes == null ? null : stackSizes.get(id);
             long built = placedItems == null ? 0 : Math.min(m.getValue(), placedItems.getOrDefault(id, 0L));
-            Line l = new Line(id, m.getValue(), built, inLinked.getOrDefault(id, 0L), elsewhere.getOrDefault(id, 0L),
+            long inv = carriedItems == null ? 0 : carriedItems.getOrDefault(id, 0L);
+            Line l = new Line(id, m.getValue(), built, inLinked.getOrDefault(id, 0L), inv, elsewhere.getOrDefault(id, 0L),
                     seen != null && seen > 0 ? seen : defaultStack(id));
             lines.add(l);
             need += l.need();
             placed += l.placed();
             have += l.useful();
+            carried += l.inInventories();
             if (l.done()) {
                 done++;
             }
         }
-        return new ProjectProgress(lines, need, placed, have, done, linked, hidden);
+        return new ProjectProgress(lines, need, placed, have, carried, done, linked, hidden);
     }
 
     /** How many items of the plan this container holds (to suggest which containers to link). */

@@ -307,15 +307,16 @@ export function ring(ratio, { size = 120, stroke = 12, label, color } = {}) {
 }
 
 /**
- * Ring with two parts: what is already placed in the world (green) and what is in the chests (blue).
- * The number in the middle is the total.
+ * Ring with up to three parts: what is already placed in the world (green), what is in the chests (blue)
+ * and what the players near the build carry (orange). The number in the middle is the total.
  */
-export function ring2(placed, chests, { size = 120, stroke = 12, label } = {}) {
+export function ring2(placed, chests, { size = 120, stroke = 12, label, inv = 0 } = {}) {
   const r = (100 - stroke) / 2;
   const c = 2 * Math.PI * r;
   const a = Math.max(0, Math.min(1, placed || 0));
   const b = Math.max(0, Math.min(1 - a, chests || 0));
-  const total = a + b;
+  const d = Math.max(0, Math.min(1 - a - b, inv || 0));
+  const total = a + b + d;
   const pctText = Math.floor(total * 100 + 1e-9) + ' %';
   const arc = (from, len, col) => (len > 0 ? s('circle', {
     cx: 50, cy: 50, r, transform: `rotate(${-90 + from * 360} 50 50)`,
@@ -324,6 +325,7 @@ export function ring2(placed, chests, { size = 120, stroke = 12, label } = {}) {
   const svg = s('svg', { viewBox: '0 0 100 100', width: size, height: size, role: 'img',
     'aria-label': `${label ? label + ' : ' : ''}${pctText}, dont ${Math.floor(a * 100 + 1e-9)} % posé` },
   s('circle', { cx: 50, cy: 50, r, style: `fill:none;stroke:var(--fill-2);stroke-width:${stroke}` }),
+  arc(a + b, d, 'var(--warn)'),
   arc(a, b, 'var(--accent)'),
   arc(0, a, 'var(--good)'),
   s('text', { x: 50, y: label ? 52 : 57, 'text-anchor': 'middle', class: 'ring-v' }, pctText),
@@ -331,14 +333,16 @@ export function ring2(placed, chests, { size = 120, stroke = 12, label } = {}) {
   return h('div.ring', svg);
 }
 
-/** Thin progress bar for one material: placed in the world (green), then in the chests (blue). */
-export function progressBar(have, need, placed = 0) {
+/** Thin progress bar for one material: placed in the world (green), in the chests (blue), in the inventories (orange). */
+export function progressBar(have, need, placed = 0, inv = 0) {
   const p = need ? Math.min(1, placed / need) : 0;
   const v = need ? Math.min(1 - p, have / need) : 1;
-  const done = p + v >= 1 - 1e-9;
-  return h('div', { class: done ? 'pbar done' : 'pbar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': need, 'aria-valuenow': Math.min(placed + have, need) },
+  const w = need ? Math.min(1 - p - v, inv / need) : 0;
+  const done = p + v + w >= 1 - 1e-9;
+  return h('div', { class: done ? 'pbar done' : 'pbar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': need, 'aria-valuenow': Math.min(placed + have + inv, need) },
     p > 0 ? h('i.pl', { style: { width: `${p * 100}%` } }) : null,
-    h('i', { style: { width: `${v * 100}%` } }));
+    h('i', { style: { width: `${v * 100}%` } }),
+    w > 0 ? h('i.iv', { style: { width: `${w * 100}%` } }) : null);
 }
 
 /** Small table for the "Tableau" view of a chart. */

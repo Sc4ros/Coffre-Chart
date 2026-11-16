@@ -7,6 +7,8 @@ import fr.coffres.model.StoredChest;
 import fr.coffres.project.Build;
 import fr.coffres.project.ProjectProgress;
 import fr.coffres.store.DataStore;
+import fr.coffres.model.Group;
+import fr.coffres.store.GroupStore;
 import fr.coffres.store.PlanStore;
 import fr.coffres.store.ProjectStore;
 
@@ -37,16 +39,18 @@ public final class Api {
     private final DataStore store;
     private final ProjectStore projects;
     private final PlanStore plans;
+    private final GroupStore groups;
     private final ZoneId zone = ZoneId.systemDefault();
 
     public Api(DataStore store, ProjectStore projects) {
-        this(store, projects, null);
+        this(store, projects, null, null);
     }
 
-    public Api(DataStore store, ProjectStore projects, PlanStore plans) {
+    public Api(DataStore store, ProjectStore projects, PlanStore plans, GroupStore groups) {
         this.store = store;
         this.projects = projects;
         this.plans = plans;
+        this.groups = groups;
     }
 
     // ------------------------------------------------------------------ visibility
@@ -676,9 +680,21 @@ public final class Api {
     // ------------------------------------------------------------------ projects
     // Lock order: store first, then projects (the in-game code does the same).
 
-    /** Shared projects are visible to everyone, solo projects only to their owner and admins. */
-    public static boolean canSee(Project p, AuthManager.Session s) {
-        return p.shared || s.admin || Objects.equals(p.owner, s.uuid);
+    /** Shared projects are visible to everyone, group projects to the group, solo projects only to their owner (and admins). */
+    public boolean canSee(Project p, AuthManager.Session s) {
+        return p.shared || s.admin || Objects.equals(p.owner, s.uuid) || inGroup(p, s.uuid);
+    }
+
+    private boolean inGroup(Project p, String uuid) {
+        return !p.shared && p.group != null && groups != null && groups.isMember(p.group, uuid);
+    }
+
+    /** "all", "group" or "solo". A project whose group was deleted is solo. */
+    public String visibility(Project p) {
+        if (p.shared) {
+            return "all";
+        }
+        return p.group != null && groups != null && groups.get(p.group) != null ? "group" : "solo";
     }
 
     /** Rename, share, replace the file, delete: owner and admins. */
@@ -686,9 +702,9 @@ public final class Api {
         return s.admin || Objects.equals(p.owner, s.uuid);
     }
 
-    /** Link containers: owner and admins, and everyone on a shared project. */
-    public static boolean canLink(Project p, AuthManager.Session s) {
-        return p.shared || canEdit(p, s);
+    /** Link containers and check the build again: owner and admins, everyone on a shared project, the group on a group project. */
+    public boolean canLink(Project p, AuthManager.Session s) {
+        return p.shared || canEdit(p, s) || inGroup(p, s.uuid);
     }
 
     private Build build(Project p) {
@@ -699,7 +715,7 @@ public final class Api {
     private ProjectProgress progress(Project p, AuthManager.Session s) {
         Build b = build(p);
         return ProjectProgress.of(p, store.chestsLocked(), c -> visibleAll(c, s), store.stackSizesLocked(),
-                b == null ? null : b.placedItems());
+                b == null ? null : b.placedItems(), plans == null ? null : plans.carried(p.id).items());
     }
 
     private Map<String, Object> projectSummary(Project p, AuthManager.Session s, ProjectProgress pr) {
@@ -707,6 +723,12 @@ public final class Api {
         m.put("id", p.id);
         m.put("name", p.name);
         m.put("shared", p.shared);
+        String vis = visibility(p);
+        m.put("visibility", vis);
+        if ("group".equals(vis)) {
+            Group g = groups.get(p.group);
+            m.put("group", Map.of("id", g.id, "name", g.name, "size", g.members.size() + 1));
+        }
         m.put("owner", p.ownerName);
         m.put("mine", Objects.equals(p.owner, s.uuid));
         m.put("canEdit", canEdit(p, s));
@@ -717,12 +739,16 @@ public final class Api {
         m.put("need", pr.need);
         m.put("placed", pr.placed);
         m.put("have", pr.have);
+        m.put("carried", pr.carried);
         m.put("missing", pr.missing());
         m.put("ratio", pr.ratio());
         m.put("percent", pr.percent());
         m.put("placedRatio", pr.placedRatio());
         m.put("placedPercent", pr.placedPercent());
         m.put("chestPercent", pr.chestPercent());
+        m.put("chestRatio", pr.chestRatio());
+        m.put("carriedRatio", pr.carriedRatio());
+        m.put("carriedPercent", pr.carriedPercent());
         m.put("checkable", p.planBlocks > 0);
         m.put("inWorld", p.placement != null && p.planBlocks > 0);
         m.put("kinds", pr.lines.size());
@@ -800,6 +826,13 @@ public final class Api {
                     bm.put("box", List.of(built.minX, built.minY, built.minZ, built.maxX, built.maxY, built.maxZ));
                     out.put("build", bm);
                 }
+                List<Map<String, Object>> who = new ArrayList<>();
+                if (plans != null) {
+                    for (Build.Carrier c : plans.carried(p.id).who()) {
+                        who.add(Map.of("name", c.name(), "n", c.items()));
+                    }
+                }
+                out.put("carriers", who);
                 List<Map<String, Object>> mats = new ArrayList<>(pr.lines.size());
                 for (ProjectProgress.Line l : pr.lines) {
                     Map<String, Object> m = new LinkedHashMap<>();
@@ -807,6 +840,7 @@ public final class Api {
                     m.put("need", l.need());
                     m.put("placed", l.placed());
                     m.put("have", l.have());
+                    m.put("inv", l.inInventories());
                     m.put("elsewhere", l.elsewhere());
                     m.put("st", l.stack());
                     mats.add(m);
@@ -874,6 +908,54 @@ public final class Api {
                 return new ArrayList<>(out);
             }
         }
+    }
+
+    // ------------------------------------------------------------------ groups of friends
+
+    private Map<String, Object> groupSummary(Group g, AuthManager.Session s, java.util.Set<String> online) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", g.id);
+        m.put("name", g.name);
+        m.put("owner", g.ownerName);
+        m.put("ownerUuid", g.owner);
+        m.put("mine", Objects.equals(g.owner, s.uuid));
+        m.put("canEdit", s.admin || Objects.equals(g.owner, s.uuid));
+        m.put("member", g.has(s.uuid));
+        List<Map<String, Object>> members = new ArrayList<>();
+        Map<String, Object> o = new LinkedHashMap<>();
+        o.put("uuid", g.owner);
+        o.put("name", g.ownerName);
+        o.put("owner", true);
+        o.put("online", online.contains(g.ownerName));
+        members.add(o);
+        for (Group.Member mb : g.members) {
+            Map<String, Object> x = new LinkedHashMap<>();
+            x.put("uuid", mb.uuid);
+            x.put("name", mb.name);
+            x.put("owner", false);
+            x.put("online", online.contains(mb.name));
+            members.add(x);
+        }
+        m.put("members", members);
+        m.put("projects", projects.countInGroup(g.id));
+        m.put("created", g.created);
+        return m;
+    }
+
+    /** The groups the player belongs to (all of them for admins), and the names that can be added. */
+    public Map<String, Object> groups(AuthManager.Session s, List<String> onlinePlayers) {
+        java.util.Set<String> online = new HashSet<>(onlinePlayers);
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Group g : groups.groupsOf(s.uuid, s.admin)) {
+            list.add(groupSummary(g, s, online));
+        }
+        list.sort(Comparator.comparing((Map<String, Object> m) -> !(Boolean) m.get("member"))
+                .thenComparing(m -> ((String) m.get("name")).toLowerCase(java.util.Locale.ROOT)));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("groups", list);
+        out.put("players", groups.knownNames());
+        out.put("max", GroupStore.MAX_OWNED);
+        return out;
     }
 
     /** Visible projects that need this item (item page). */

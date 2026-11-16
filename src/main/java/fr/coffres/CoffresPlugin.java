@@ -6,6 +6,7 @@ import fr.coffres.game.Locator;
 import fr.coffres.model.Project;
 import fr.coffres.project.Build;
 import fr.coffres.store.DataStore;
+import fr.coffres.store.GroupStore;
 import fr.coffres.store.PlanStore;
 import fr.coffres.store.ProjectStore;
 import fr.coffres.track.ChestTracker;
@@ -34,6 +35,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
     private DataStore store;
     private ProjectStore projects;
     private PlanStore plans;
+    private GroupStore groups;
     private BuildScanner scanner;
     private AuthManager auth;
     private AssetManager assets;
@@ -57,6 +59,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         store = new DataStore(data, getLogger());
         projects = new ProjectStore(data.resolve("projects.json"), getLogger(), store::bump);
         plans = new PlanStore(data.resolve("plans"), getLogger());
+        groups = new GroupStore(data.resolve("groups.json"), getLogger(), store::bump);
         scanner = new BuildScanner(this, plans);
         auth = new AuthManager(data.resolve("sessions.json"), getLogger());
         linkMode = new LinkMode();
@@ -71,6 +74,8 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         projects.load();
         projects.pruneChests(new HashSet<>(store.ids()));
         auth.load();
+        groups.load();
+        auth.knownPlayerIds().forEach(groups::seen);
 
         FileConfiguration cfg = getConfig();
         assets = new AssetManager(data.resolve("cache"), getLogger(), Bukkit.getMinecraftVersion(),
@@ -100,11 +105,13 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
             projects.pruneChests(new HashSet<>(store.ids()));
             projects.save();
             plans.save();
+            groups.save();
             auth.save();
         }, 600L, 600L);
 
         for (Player p : Bukkit.getOnlinePlayers()) {
             auth.refreshPlayer(p.getUniqueId(), p.getName(), p.hasPermission("coffres.admin"));
+            groups.seen(p.getUniqueId().toString(), p.getName());
         }
         startWeb();
         getLogger().info(store.all().size() + " coffre(s) suivis, " + projects.all().size() + " projet(s).");
@@ -130,6 +137,9 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         }
         if (plans != null) {
             plans.save();
+        }
+        if (groups != null) {
+            groups.save();
         }
         if (auth != null) {
             auth.save();
@@ -169,7 +179,8 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         linkMode.setTimeoutSeconds(cfg.getInt("tracking.link-mode-timeout-seconds", 180));
         locator.setDurationSeconds(cfg.getInt("locate.duration-seconds", 60));
         auth.setSessionDays(cfg.getInt("auth.session-days", 180));
-        scanner.configure(cfg.getInt("projects.check-blocks-per-tick", 20_000), cfg.getInt("projects.recheck-minutes", 10));
+        scanner.configure(cfg.getInt("projects.check-blocks-per-tick", 20_000), cfg.getInt("projects.recheck-minutes", 10),
+                cfg.getBoolean("projects.count-inventories", true));
 
         int port = cfg.getInt("web.port", 8125);
         String configured = cfg.getString("web.public-url", "").trim();
@@ -198,7 +209,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
         String bind = cfg.getString("web.bind", "0.0.0.0");
         int port = cfg.getInt("web.port", 8125);
         webKey = bind + ":" + port;
-        web = new WebServer(getLogger(), store, projects, plans, auth, assets, bridge, webSettings());
+        web = new WebServer(getLogger(), store, projects, plans, groups, auth, assets, bridge, webSettings());
         web.loadStatic(CoffresPlugin.class, getDataFolder().toPath().resolve("web"));
         try {
             web.start(bind, port);
@@ -248,6 +259,7 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
     public void onJoin(PlayerJoinEvent e) {
         Player p = e.getPlayer();
         auth.refreshPlayer(p.getUniqueId(), p.getName(), p.hasPermission("coffres.admin"));
+        groups.seen(p.getUniqueId().toString(), p.getName());
     }
 
     @EventHandler
@@ -265,6 +277,10 @@ public final class CoffresPlugin extends JavaPlugin implements Listener {
 
     public ProjectStore projects() {
         return projects;
+    }
+
+    public GroupStore groups() {
+        return groups;
     }
 
     public PlanStore plans() {

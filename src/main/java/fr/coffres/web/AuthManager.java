@@ -246,6 +246,15 @@ public final class AuthManager {
         }
     }
 
+    /** uuid → name of every player with a saved session (to seed the list of players seen on the server). */
+    public synchronized java.util.Map<String, String> knownPlayerIds() {
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (Session s : sessions.values()) {
+            out.put(s.uuid, s.name);
+        }
+        return out;
+    }
+
     public synchronized List<String> knownPlayers() {
         List<String> names = new ArrayList<>();
         for (Session s : sessions.values()) {

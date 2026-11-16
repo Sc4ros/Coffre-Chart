@@ -162,11 +162,12 @@ public final class Menus implements Listener {
         lore.add(ProjectsInGame.bar(progress.ratio(), 20) + " <white>" + progress.percent() + " %</white>");
         if (pr.placement != null) {
             lore.add("<green>" + progress.placedPercent() + " % posé</green> <dark_gray>·</dark_gray> <aqua>" + progress.chestPercent()
-                    + " % dans les coffres</aqua>");
+                    + " % coffres</aqua>" + (progress.carried > 0 ? " <dark_gray>·</dark_gray> <gold>" + progress.carriedPercent()
+                    + " % inventaires</gold>" : ""));
         }
-        lore.add("<gray>" + Msg.number(progress.placed + progress.have) + " / " + Msg.number(progress.need) + " blocs · "
+        lore.add("<gray>" + Msg.number(progress.placed + progress.have + progress.carried) + " / " + Msg.number(progress.need) + " blocs · "
                 + progress.doneKinds + "/" + progress.lines.size() + " sortes complètes</gray>");
-        lore.add("<gray>" + (pr.shared ? "Projet commun" : "Projet solo") + " · par " + esc(pr.ownerName == null ? "?" : pr.ownerName)
+        lore.add("<gray>" + esc(plugin.projectsGame().visibilityText(pr)) + " · par " + esc(pr.ownerName == null ? "?" : pr.ownerName)
                 + " · " + progress.linked.size() + " coffre(s) lié(s)</gray>");
         List<ProjectProgress.Line> missing = progress.lines.stream().filter(l -> l.missing() > 0)
                 .sorted((a, b) -> Long.compare(b.missing(), a.missing())).limit(4).toList();
@@ -188,7 +189,7 @@ public final class Menus implements Listener {
         }
         l.add(Component.empty());
         l.add(line("<yellow>▶ Clic : les blocs qu'il manque</yellow>"));
-        if (ProjectsInGame.canLink(p, pr)) {
+        if (plugin.projectsGame().canLink(p, pr)) {
             l.add(line("<yellow>▶ Clic droit : lier des coffres</yellow>"));
         }
         meta.lore(l);
@@ -198,7 +199,7 @@ public final class Menus implements Listener {
 
     public void openProject(Player p, String projectId, int page) {
         Project pr = plugin.projects().get(projectId);
-        if (pr == null || !ProjectsInGame.canSee(p, pr)) {
+        if (pr == null || !plugin.projectsGame().canSee(p, pr)) {
             openProjects(p, 0);
             return;
         }
@@ -228,13 +229,14 @@ public final class Menus implements Listener {
                 ProjectsInGame.bar(progress.ratio(), 20) + " <white>" + progress.percent() + " %</white>",
                 pr.placement != null
                         ? "<green>" + Msg.number(progress.placed) + " posés</green> <gray>+</gray> <aqua>" + Msg.number(progress.have)
-                        + " dans les coffres</aqua> <gray>/ " + Msg.number(progress.need) + "</gray>"
+                        + " coffres</aqua>" + (progress.carried > 0 ? " <gray>+</gray> <gold>" + Msg.number(progress.carried) + " inventaires</gold>" : "")
+                        + " <gray>/ " + Msg.number(progress.need) + "</gray>"
                         : "<gray>" + Msg.number(progress.have) + " / " + Msg.number(progress.need) + " blocs dans les coffres liés</gray>",
                 "<gray>Manque " + Msg.number(progress.missing()) + " blocs · " + (progress.lines.size() - progress.doneKinds) + " sorte(s) incomplète(s)</gray>",
                 "",
                 "<dark_gray>" + esc(pr.file == null ? "" : pr.file) + " · " + pr.sx + "×" + pr.sy + "×" + pr.sz + "</dark_gray>",
-                "<dark_gray>" + (pr.shared ? "Projet commun" : "Projet solo") + " · par " + esc(pr.ownerName == null ? "?" : pr.ownerName) + "</dark_gray>"));
-        if (ProjectsInGame.canLink(p, pr)) {
+                "<dark_gray>" + esc(plugin.projectsGame().visibilityText(pr)) + " · par " + esc(pr.ownerName == null ? "?" : pr.ownerName) + "</dark_gray>"));
+        if (plugin.projectsGame().canLink(p, pr)) {
             boolean on = pr.id.equals(plugin.linkMode().projectOf(p));
             inv.setItem(47, item(Material.LEAD, on ? "<green><b>Liaison : activée</b></green>" : "<aqua><b>Lier des coffres</b></aqua>", on,
                     "<gray>" + progress.linked.size() + " coffre(s) lié(s) à ce projet.</gray>",
@@ -262,13 +264,16 @@ public final class Menus implements Listener {
         meta.displayName((ln.done() ? Component.text("✔ ", NamedTextColor.GREEN).append(name.color(NamedTextColor.GREEN))
                 : name.color(NamedTextColor.WHITE)).decoration(TextDecoration.ITALIC, false));
         List<Component> lore = new ArrayList<>();
-        double ratio = ln.need() == 0 ? 1 : Math.min(1, (double) (ln.placed() + ln.useful()) / ln.need());
+        double ratio = ln.need() == 0 ? 1 : Math.min(1, (double) (ln.placed() + ln.useful() + ln.inInventories()) / ln.need());
         lore.add(line(ProjectsInGame.bar(ratio, 16) + " <white>" + (int) Math.floor(ratio * 100) + " %</white>"));
         lore.add(line("<gray>Il en faut :</gray> <white>" + ProjectsInGame.stacks(ln.need(), ln.stack()) + "</white>"));
         if (ln.placed() > 0) {
             lore.add(line("<gray>Déjà posés :</gray> <green>" + Msg.number(ln.placed()) + "</green>"));
         }
         lore.add(line("<gray>Dans les coffres liés :</gray> <white>" + Msg.number(ln.have()) + "</white>"));
+        if (ln.inInventories() > 0) {
+            lore.add(line("<gray>Dans les inventaires :</gray> <gold>" + Msg.number(ln.inInventories()) + "</gold>"));
+        }
         if (!ln.done()) {
             lore.add(line("<gray>Manque :</gray> <gold>" + ProjectsInGame.stacks(ln.missing(), ln.stack()) + "</gold>"));
         }
@@ -434,7 +439,7 @@ public final class Menus implements Listener {
                 Project pr = plugin.projects().get(h.idBySlot.get(slot));
                 if (pr == null) {
                     openProjects(p, h.page);
-                } else if (e.getClick().isRightClick() && ProjectsInGame.canLink(p, pr)) {
+                } else if (e.getClick().isRightClick() && plugin.projectsGame().canLink(p, pr)) {
                     p.closeInventory();
                     plugin.projectsGame().startLinking(p, pr);
                 } else {
@@ -458,7 +463,7 @@ public final class Menus implements Listener {
                 case 53 -> openProject(p, pr.id, h.page + 1);
                 case 49 -> openProjects(p, 0);
                 case 47 -> {
-                    if (ProjectsInGame.canLink(p, pr)) {
+                    if (plugin.projectsGame().canLink(p, pr)) {
                         p.closeInventory();
                         plugin.projectsGame().startLinking(p, pr);
                     }

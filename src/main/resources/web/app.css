@@ -174,6 +174,8 @@ body::before {
 .head h1 { font-size: 32px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; }
 .head .sub { margin-top: 4px; color: var(--text-2); font-size: 15px; }
 .head .kicker { color: var(--text-2); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+.head > .actions { margin: 0; flex-wrap: nowrap; }
+@media (max-width: 560px) { .head:has(> .actions) { flex-wrap: wrap; } .head > .actions { width: 100%; } .head > .actions > .btn { flex: 1; justify-content: center; white-space: nowrap; padding-left: 10px; padding-right: 10px; } }
 .back {
   display: inline-flex; align-items: center; gap: 2px;
   margin: 2px 0 0 -6px; padding: 6px 8px; border-radius: 10px;
@@ -538,6 +540,7 @@ code, kbd { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; fo
 .pbar { display: flex; height: 6px; border-radius: 999px; background: var(--fill-2); overflow: hidden; margin-top: 6px; max-width: 420px; }
 .pbar > i { display: block; height: 100%; background: var(--accent); }
 .pbar > i.pl { background: var(--good); }
+.pbar > i.iv { background: var(--warn); }
 .pbar.done > i { background: var(--good); }
 /* Blocks placed in the world */
 .legend3 { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
@@ -545,6 +548,11 @@ code, kbd { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; fo
 .legend3 i { width: 10px; height: 10px; border-radius: 3px; background: var(--fill-2); }
 .legend3 i.pl { background: var(--good); }
 .legend3 i.ch { background: var(--accent); }
+.legend3 i.iv { background: var(--warn); }
+.tile .v.inv { color: var(--warn); }
+@media (min-width: 640px) { .tiles.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.carriers { margin-top: 10px; font-size: 13.5px; color: var(--text-2); }
+.carriers b { color: var(--text); font-weight: 600; }
 .proj-ring { display: flex; flex-direction: column; align-items: center; justify-self: center; }
 .tile .v.placed { color: var(--good); }
 .world-box { padding: 0 16px 16px; }
@@ -564,6 +572,26 @@ select.input { appearance: none; -webkit-appearance: none; cursor: pointer; }
 .place-help { margin: 0 0 14px; }
 .place-help summary { cursor: pointer; color: var(--accent-text); font-size: 14px; font-weight: 600; }
 .place-help p { margin-top: 8px; }
+/* Groups of friends */
+.vis-group { margin-top: 10px; }
+.vis-group:empty { display: none; }
+.add-member { display: flex; gap: 8px; margin-bottom: 8px; }
+.add-member .input { flex: 1; min-width: 0; padding: 9px 12px; font-size: 15px; }
+.groups { display: grid; gap: 8px; margin-top: 12px; }
+.group { background: var(--surface-2); border-radius: 14px; overflow: hidden; }
+.group-head { width: 100%; display: flex; align-items: center; gap: 10px; justify-content: space-between; border: 0; background: none; padding: 12px 14px; text-align: left; cursor: pointer; }
+.group-head .nm { font-weight: 650; }
+.group-head .meta { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.group-head .chev { width: 18px; height: 18px; color: var(--text-3); transition: transform .15s; flex: none; }
+.group-head .chev.open { transform: rotate(90deg); }
+.group-body { padding: 0 14px 14px; }
+.members { display: grid; gap: 2px; margin-bottom: 12px; }
+.member { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.member .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member .icon-btn { width: 30px; height: 30px; color: var(--bad); }
+.member .icon-btn svg { width: 16px; height: 16px; }
+.group-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.badge.group { background: rgba(255, 159, 10, .16); color: var(--warn); }
 .row.mat { align-items: center; }
 .row .end .avail { color: var(--accent-text); }
 .ok-pill { display: inline-flex; align-items: center; gap: 3px; color: var(--good); font-weight: 650; font-size: 13.5px; }

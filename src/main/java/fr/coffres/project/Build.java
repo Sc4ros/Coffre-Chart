@@ -3,7 +3,9 @@ package fr.coffres.project;
 import fr.coffres.model.Placement;
 
 import java.util.BitSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A plan placed in the world: which of its blocks are already there. The game fills it (main thread), the site reads it
@@ -27,6 +29,10 @@ public final class Build {
     private int placedCount;
     private boolean dirty;
     private long version;
+
+    /** A member of the project online and how many items of the project they carry. */
+    public record Carrier(String name, long items) {
+    }
 
     // Status of the last full check, for the site.
     private volatile boolean scanning;

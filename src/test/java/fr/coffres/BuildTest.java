@@ -160,6 +160,17 @@ class BuildTest {
         assertEquals(0, glass.useful(), "glass is all placed: the 5 in the chest are extra");
         assertTrue(glass.done());
 
+        // Glass taken out of the chest and carried: 3 still to find, 2 in a pocket (10 more carried are extra).
+        Project q = new Project();
+        q.materials.put("glass", 10L);
+        ProjectProgress inv = ProjectProgress.of(q, List.of(), x -> true, Map.of(), Map.of("glass", 5L), Map.of("glass", 12L));
+        assertEquals(5, inv.placed);
+        assertEquals(5, inv.carried, "the inventories only count for what is still to place");
+        assertEquals(0, inv.missing());
+        assertEquals(50, inv.placedPercent());
+        assertEquals(0, inv.chestPercent());
+        assertEquals(50, inv.carriedPercent());
+
         ProjectProgress without = ProjectProgress.of(p, List.of(c), x -> true, Map.of());
         assertEquals(0, without.placed);
         assertEquals(69, without.have);

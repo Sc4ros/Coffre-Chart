@@ -13,6 +13,8 @@ import fr.coffres.model.Project;
 import fr.coffres.project.Nbt;
 import fr.coffres.project.SchematicReader;
 import fr.coffres.store.DataStore;
+import fr.coffres.model.Group;
+import fr.coffres.store.GroupStore;
 import fr.coffres.store.PlanStore;
 import fr.coffres.store.ProjectStore;
 
@@ -81,6 +83,7 @@ public final class WebServer {
     private final DataStore store;
     private final ProjectStore projects;
     private final PlanStore plans;
+    private final GroupStore groups;
     private final AuthManager auth;
     private final AssetManager assets;
     private final GameBridge game;
@@ -94,8 +97,9 @@ public final class WebServer {
     private HttpServer server;
     private ExecutorService pool;
 
-    public WebServer(Logger logger, DataStore store, ProjectStore projects, PlanStore plans, AuthManager auth, AssetManager assets,
-                     GameBridge game, Settings settings) {
+    public WebServer(Logger logger, DataStore store, ProjectStore projects, PlanStore plans, GroupStore groups, AuthManager auth,
+                     AssetManager assets, GameBridge game, Settings settings) {
+        this.groups = groups;
         this.logger = logger;
         this.store = store;
         this.projects = projects;
@@ -104,7 +108,7 @@ public final class WebServer {
         this.assets = assets;
         this.game = game;
         this.settings = settings;
-        this.api = new Api(store, projects, plans);
+        this.api = new Api(store, projects, plans, groups);
     }
 
     public void setSettings(Settings settings) {
@@ -458,7 +462,12 @@ public final class WebServer {
             if (name == null) {
                 name = plan.name() != null ? plan.name() : baseName(fileName);
             }
-            Project p = projects.create(name, s.uuid, s.name, "1".equals(q.get("shared")), fileName, plan);
+            String vis = q.get("vis") != null ? q.get("vis") : "1".equals(q.get("shared")) ? "all" : "solo";
+            String groupId = checkVisibility(s, vis, q.get("group"));
+            Project p = projects.create(name, s.uuid, s.name, "all".equals(vis), fileName, plan);
+            if (groupId != null) {
+                projects.setVisibility(p.id, false, groupId);
+            }
             storePlan(p, plan);
             logger.info(s.name + " a créé le projet « " + p.name + " » (" + p.materials.size() + " sortes de blocs, "
                     + p.blocks + " au total).");
@@ -467,6 +476,30 @@ public final class WebServer {
         }
         if (route.startsWith("project/")) {
             handleProject(ex, s, method, q, route.substring(8));
+            return;
+        }
+        if (route.equals("groups")) {
+            sendJson(ex, 200, api.groups(s, game.onlinePlayers()));
+            return;
+        }
+        if (route.equals("groups/create")) {
+            requirePost(method);
+            String name = str(body(ex), "name");
+            if (name == null || name.isBlank()) {
+                throw new HttpError(400, "Donne un nom au groupe.");
+            }
+            if (!s.admin && groups.countOwnedBy(s.uuid) >= GroupStore.MAX_OWNED) {
+                throw new HttpError(409, "Tu as déjà " + GroupStore.MAX_OWNED + " groupes. Supprimes-en un pour en créer un nouveau.");
+            }
+            Group g = groups.create(name, s.uuid, s.name);
+            logger.info(s.name + " a créé le groupe « " + g.name + " ».");
+            Map<String, Object> out = api.groups(s, game.onlinePlayers());
+            out.put("created", g.id);
+            sendJson(ex, 200, out);
+            return;
+        }
+        if (route.startsWith("group/")) {
+            handleGroup(ex, s, method, route.substring(6));
             return;
         }
         throw new HttpError(404, "Route inconnue.");
@@ -482,7 +515,7 @@ public final class WebServer {
             throw new HttpError(400, "Projet invalide.");
         }
         Project p = projects.get(id);
-        if (p == null || !Api.canSee(p, s)) {
+        if (p == null || !api.canSee(p, s)) {
             throw new HttpError(404, "Ce projet n'existe plus ou est privé.");
         }
         switch (action) {
@@ -490,13 +523,20 @@ public final class WebServer {
                 if ("POST".equals(method)) {
                     requireProjectEdit(p, s);
                     JsonObject b = body(ex);
-                    Boolean shared = b.has("shared") && !b.get("shared").isJsonNull() ? b.get("shared").getAsBoolean() : null;
-                    projects.edit(id, str(b, "name"), shared);
+                    String vis = str(b, "visibility");
+                    if (vis != null) {
+                        String groupId = checkVisibility(s, vis, str(b, "group"));
+                        projects.edit(id, str(b, "name"), null);
+                        projects.setVisibility(id, "all".equals(vis), groupId);
+                    } else {
+                        Boolean shared = b.has("shared") && !b.get("shared").isJsonNull() ? b.get("shared").getAsBoolean() : null;
+                        projects.edit(id, str(b, "name"), shared);
+                    }
                 }
             }
             case "chests" -> {
                 requirePost(method);
-                if (!Api.canLink(p, s)) {
+                if (!api.canLink(p, s)) {
                     throw new HttpError(403, "Seul le créateur de ce projet solo (ou un admin) peut y lier des coffres.");
                 }
                 JsonObject b = body(ex);
@@ -525,7 +565,7 @@ public final class WebServer {
             }
             case "scan" -> {
                 requirePost(method);
-                if (!Api.canLink(p, s)) {
+                if (!api.canLink(p, s)) {
                     throw new HttpError(403, "Seul le créateur de ce projet solo (ou un admin) peut le vérifier.");
                 }
                 if (p.placement == null || plans.build(id) == null) {
@@ -627,6 +667,95 @@ public final class WebServer {
         logger.info(s.name + " a placé le projet « " + p.name + " » en " + at.world + " " + at.x + " " + at.y + " " + at.z
                 + " (rotation " + at.rot + "°, miroir " + at.mirror + ").");
         game.rescan(p.id, UUID.fromString(s.uuid));
+    }
+
+    /**
+     * Checks a visibility chosen on the site: "all", "group" (a group the player belongs to; any group for admins)
+     * or "solo". Returns the group id for "group", null otherwise.
+     */
+    private String checkVisibility(AuthManager.Session s, String vis, String groupId) {
+        switch (vis == null ? "" : vis) {
+            case "all", "solo" -> {
+                return null;
+            }
+            case "group" -> {
+                Group g = groupId == null ? null : groups.get(groupId);
+                if (g == null) {
+                    throw new HttpError(400, "Choisis un groupe d'amis (ou crée-en un).");
+                }
+                if (!s.admin && !g.has(s.uuid)) {
+                    throw new HttpError(403, "Tu ne fais pas partie de ce groupe.");
+                }
+                return g.id;
+            }
+            default -> throw new HttpError(400, "Choisis qui voit le projet.");
+        }
+    }
+
+    /** /api/group/{id}[/add|/remove|/delete] */
+    private void handleGroup(HttpExchange ex, AuthManager.Session s, String method, String rest) throws IOException {
+        requirePost(method);
+        int slash = rest.indexOf('/');
+        String id = slash < 0 ? rest : rest.substring(0, slash);
+        String action = slash < 0 ? "" : rest.substring(slash + 1);
+        if (!CHEST_ID.matcher(id).matches()) {
+            throw new HttpError(400, "Groupe invalide.");
+        }
+        Group g = groups.get(id);
+        if (g == null || !(s.admin || g.has(s.uuid))) {
+            throw new HttpError(404, "Ce groupe n'existe plus.");
+        }
+        boolean manager = s.admin || g.owner.equals(s.uuid);
+        JsonObject b = body(ex);
+        switch (action) {
+            case "" -> {
+                if (!manager) {
+                    throw new HttpError(403, "Seul le créateur du groupe peut le renommer.");
+                }
+                String name = str(b, "name");
+                if (name == null || name.isBlank()) {
+                    throw new HttpError(400, "Donne un nom au groupe.");
+                }
+                groups.rename(id, name);
+            }
+            case "add" -> {
+                if (!manager) {
+                    throw new HttpError(403, "Seul le créateur du groupe peut y ajouter des joueurs.");
+                }
+                String name = str(b, "name");
+                String uuid = groups.findPlayer(name);
+                if (uuid == null) {
+                    throw new HttpError(404, "Aucun joueur « " + (name == null ? "" : name.trim()) + " » n'est encore venu sur le serveur.");
+                }
+                if (g.members.size() >= GroupStore.MAX_MEMBERS) {
+                    throw new HttpError(409, "Ce groupe a déjà " + GroupStore.MAX_MEMBERS + " membres.");
+                }
+                if (!groups.add(id, uuid, groups.nameOf(uuid))) {
+                    throw new HttpError(409, groups.nameOf(uuid) + " fait déjà partie du groupe.");
+                }
+                logger.info(s.name + " a ajouté " + groups.nameOf(uuid) + " au groupe « " + g.name + " ».");
+            }
+            case "remove" -> {
+                String uuid = str(b, "uuid");
+                if (uuid == null || !(manager || uuid.equals(s.uuid))) {
+                    throw new HttpError(403, "Seul le créateur du groupe peut en retirer des joueurs.");
+                }
+                if (uuid.equals(g.owner)) {
+                    throw new HttpError(400, "Le créateur ne peut pas quitter son groupe : il peut le supprimer.");
+                }
+                groups.remove(id, uuid);
+            }
+            case "delete" -> {
+                if (!manager) {
+                    throw new HttpError(403, "Seul le créateur du groupe peut le supprimer.");
+                }
+                groups.delete(id);
+                int n = projects.clearGroup(id);
+                logger.info(s.name + " a supprimé le groupe « " + g.name + " » (" + n + " projet(s) passent en solo).");
+            }
+            default -> throw new HttpError(404, "Route inconnue.");
+        }
+        sendJson(ex, 200, api.groups(s, game.onlinePlayers()));
     }
 
     private static void requireProjectEdit(Project p, AuthManager.Session s) {

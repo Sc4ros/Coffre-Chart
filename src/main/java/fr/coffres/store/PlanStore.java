@@ -39,6 +39,12 @@ public final class PlanStore {
     private final Path dir;
     private final Logger logger;
     private final Map<String, Build> builds = new ConcurrentHashMap<>();
+    private final Map<String, Carried> carried = new ConcurrentHashMap<>();
+
+    /** Items of a project in the inventories of its members online, and who carries them. */
+    public record Carried(Map<String, Long> items, List<Build.Carrier> who) {
+        public static final Carried NONE = new Carried(Map.of(), List.of());
+    }
 
     public PlanStore(Path dir, Logger logger) {
         this.dir = dir;
@@ -54,6 +60,25 @@ public final class PlanStore {
 
     private Path bitsFile(String id) {
         return dir.resolve(id + ".placed");
+    }
+
+    // ------------------------------------------------------------------ inventories (refreshed every second by the game)
+
+    /** What the members of the project online carry (placed in the world or not). */
+    public Carried carried(String projectId) {
+        return carried.getOrDefault(projectId, Carried.NONE);
+    }
+
+    /** Returns true when it changed. */
+    public boolean setCarried(String projectId, Map<String, Long> items, List<Build.Carrier> who) {
+        Carried now = items.isEmpty() ? Carried.NONE : new Carried(Map.copyOf(items), List.copyOf(who));
+        Carried old = now == Carried.NONE ? carried.remove(projectId) : carried.put(projectId, now);
+        return !(old == null ? Carried.NONE : old).equals(now);
+    }
+
+    /** Forgets the projects that no longer exist. Returns true when something was removed. */
+    public boolean keepCarried(java.util.Set<String> projectIds) {
+        return carried.keySet().retainAll(projectIds);
     }
 
     // ------------------------------------------------------------------ plans

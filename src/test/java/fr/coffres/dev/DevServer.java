@@ -5,6 +5,8 @@ import fr.coffres.model.Project;
 import fr.coffres.model.StoredChest;
 import fr.coffres.project.Build;
 import fr.coffres.project.SchematicReader;
+import fr.coffres.model.Group;
+import fr.coffres.store.GroupStore;
 import fr.coffres.store.PlanStore;
 import fr.coffres.store.DataStore;
 import fr.coffres.store.ProjectStore;
@@ -46,13 +48,19 @@ public final class DevServer {
         MockData.fillProjects(projects, store);
         PlanStore plans = new PlanStore(dir.resolve("store").resolve("plans"), log);
         demoHouse(projects, plans, store);
+        GroupStore groups = new GroupStore(dir.resolve("store").resolve("groups.json"), log, store::bump);
+        MockData.PLAYERS.forEach((name, uuid) -> groups.seen(uuid.toString(), name));
+        // Alex's iron farm is shared with a group of friends that Steve is part of.
+        Group friends = groups.create("Les potes", MockData.PLAYERS.get("Alex").toString(), "Alex");
+        groups.add(friends.id, MockData.STEVE.toString(), "Steve");
+        projects.setVisibility("fermefer", false, friends.id);
 
         AuthManager auth = new AuthManager(dir.resolve("sessions.json"), log);
         AssetManager assets = new AssetManager(dir.resolve("cache"), log, "26.2", "fr_fr", true);
         assets.start();
 
         FakeGame game = new FakeGame(store, plans);
-        WebServer web = new WebServer(log, store, projects, plans, auth, assets, game,
+        WebServer web = new WebServer(log, store, projects, plans, groups, auth, assets, game,
                 new WebServer.Settings("Serveur de test", "http://localhost:" + port, 60, 20, 15, 10_000_000));
         if (webDir != null) {
             web.loadStatic(DevServer.class, webDir);
@@ -101,7 +109,7 @@ public final class DevServer {
         at.at = System.currentTimeMillis() - 3_600_000L;
         projects.setPlacement(p.id, at);
         Build b = plans.activate(projects.get(p.id));
-        FakeGame.build(b, 0.45);
+        FakeGame.build(plans, b, 0.45);
         b.scanFinished(0);
     }
 
@@ -117,11 +125,14 @@ public final class DevServer {
         }
 
         /** The lowest blocks first, like a real build going up. */
-        static void build(Build b, double fraction) {
+        static void build(PlanStore plans, Build b, double fraction) {
             int n = (int) Math.round(b.size() * Math.min(1, fraction));
             for (int k = 0; k < b.size(); k++) {
                 b.set(k, k < n);
             }
+            // Steve and Alex are on the site with some blocks in their pockets.
+            plans.setCarried(b.projectId, Map.of("spruce_slab", 40L, "spruce_stairs", 12L, "glass_pane", 6L),
+                    List.of(new Build.Carrier("Steve", 46), new Build.Carrier("Alex", 12)));
         }
 
         @Override
@@ -145,7 +156,7 @@ public final class DevServer {
                         Thread.sleep(500);
                         b.scanProgress(i / 6.0);
                     }
-                    build(b, f);
+                    build(plans, b, f);
                     b.scanFinished(b.at.world.equals("world") ? 0 : b.size() / 3);
                     store.bump();
                     System.out.println("  [jeu] vérification de " + projectId + " : " + b.placedCount() + "/" + b.size() + " blocs posés");

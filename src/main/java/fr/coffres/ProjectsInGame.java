@@ -33,12 +33,39 @@ public final class ProjectsInGame {
 
     // ------------------------------------------------------------------ rules (same as the site)
 
-    public static boolean canSee(Player p, Project pr) {
-        return pr.shared || p.hasPermission("coffres.admin") || p.getUniqueId().toString().equals(pr.owner);
+    public boolean canSee(Player p, Project pr) {
+        return pr.shared || p.hasPermission("coffres.admin") || p.getUniqueId().toString().equals(pr.owner) || inGroup(p, pr);
     }
 
-    public static boolean canLink(Player p, Project pr) {
-        return pr.shared || p.hasPermission("coffres.admin") || p.getUniqueId().toString().equals(pr.owner);
+    /** Link containers and check the build again (same people as the site). */
+    public boolean canLink(Player p, Project pr) {
+        return canSee(p, pr);
+    }
+
+    private boolean inGroup(Player p, Project pr) {
+        return !pr.shared && pr.group != null && plugin.groups().isMember(pr.group, p.getUniqueId().toString());
+    }
+
+    /** "Projet commun", "Groupe « Les potes »" or "Projet solo". */
+    public String visibilityText(Project pr) {
+        if (pr.shared) {
+            return "Projet commun";
+        }
+        fr.coffres.model.Group g = pr.group == null ? null : plugin.groups().get(pr.group);
+        return g != null ? "Groupe « " + g.name + " »" : "Projet solo";
+    }
+
+    /** Who may count with their inventory near the build: null = everyone (shared project). */
+    public java.util.Set<String> people(Project pr) {
+        if (pr.shared) {
+            return null;
+        }
+        java.util.Set<String> out = new java.util.HashSet<>();
+        if (pr.group != null) {
+            out.addAll(plugin.groups().people(pr.group));
+        }
+        out.add(pr.owner);
+        return out;
     }
 
     static boolean canSee(Player p, StoredChest c) {
@@ -64,7 +91,8 @@ public final class ProjectsInGame {
             synchronized (plugin.projects()) {
                 Build b = pr.placement == null ? null : plugin.plans().build(pr.id);
                 return ProjectProgress.of(pr, store.chestsLocked(), c -> canSee(p, c), store.stackSizesLocked(),
-                        b != null && b.at == pr.placement ? b.placedItems() : null);
+                        b != null && b.at == pr.placement ? b.placedItems() : null,
+                        plugin.plans().carried(pr.id).items());
             }
         }
     }
@@ -258,7 +286,7 @@ public final class ProjectsInGame {
 
     public void startLinking(Player p, Project pr) {
         if (!canLink(p, pr)) {
-            Msg.send(p, "<red>Ce projet est à <owner> : seul lui (ou un admin) peut y lier des coffres.</red>",
+            Msg.send(p, "<red>Ce projet est à <owner> : seuls lui, son groupe (ou un admin) peuvent y lier des coffres.</red>",
                     Placeholder.unparsed("owner", pr.ownerName == null ? "quelqu'un d'autre" : pr.ownerName));
             return;
         }

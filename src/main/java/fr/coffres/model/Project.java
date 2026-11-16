@@ -17,6 +17,8 @@ public final class Project {
     public String ownerName;
     /** Visible to every player, who can also link their containers to it. Otherwise only the owner and admins see it. */
     public boolean shared;
+    /** When not shared: the group of friends who also see it and link their containers (null = solo). */
+    public String group;
     public long created;
     public long updated;
 

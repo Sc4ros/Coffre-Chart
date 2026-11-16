@@ -215,6 +215,56 @@ public final class ProjectStore {
         return true;
     }
 
+    /**
+     * Who sees the project: everyone ({@code shared}), a group of friends ({@code group}), or only its creator
+     * (neither).
+     */
+    public boolean setVisibility(String id, boolean shared, String group) {
+        synchronized (this) {
+            Project p = projects.get(id);
+            if (p == null) {
+                return false;
+            }
+            p.shared = shared;
+            p.group = shared ? null : group;
+            p.updated = System.currentTimeMillis();
+            dirty = true;
+        }
+        onChange.run();
+        return true;
+    }
+
+    /** A group was deleted: its projects become solo. Returns how many changed. */
+    public int clearGroup(String groupId) {
+        int n = 0;
+        synchronized (this) {
+            for (Project p : projects.values()) {
+                if (groupId.equals(p.group)) {
+                    p.group = null;
+                    n++;
+                }
+            }
+            if (n > 0) {
+                dirty = true;
+            }
+        }
+        if (n > 0) {
+            onChange.run();
+        }
+        return n;
+    }
+
+    /** Projects of a group. */
+    public synchronized int countInGroup(String groupId) {
+        int n = 0;
+        for (Project p : projects.values()) {
+            if (!p.shared && groupId.equals(p.group)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     /** Edits name / sharing. Null arguments are left unchanged. */
     public boolean edit(String id, String name, Boolean shared) {
         synchronized (this) {
@@ -227,6 +277,9 @@ public final class ProjectStore {
             }
             if (shared != null) {
                 p.shared = shared;
+                if (shared) {
+                    p.group = null;
+                }
             }
             p.updated = System.currentTimeMillis();
             dirty = true;
