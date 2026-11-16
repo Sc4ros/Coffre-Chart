@@ -11,7 +11,7 @@ Le mode d'emploi pour les joueurs et les admins est dans [`README.md`](README.md
 
 ## Où en est le projet
 
-- **Version actuelle : 1.6.0** (`release/Coffres-1.6.0.jar`).
+- **Version actuelle : 1.6.1** (`release/Coffres-1.6.1.jar`).
 - Compile, et les **24 tests** passent (BuildTest 6, CoreTest 6, GroupTest 3, ProjectTest 7, VisibilityTest 2).
 - Le **site** a été testé dans un navigateur avec les données de démonstration (`./gradlew runDev`), sur téléphone et PC.
 - **Pas encore testé sur un vrai serveur Minecraft** : tout ce qui se passe en jeu (voir « Pas encore fait » en bas).
@@ -348,6 +348,19 @@ groupe, retour en commun) ; 23 tests passent. Sur le site de démo : créer un g
 « Bob » jamais venu, passer la petite maison en groupe ; connecté en Alex (non admin) : il voit les projets de ses
 groupes, peut lier (`canLink`), ne peut pas modifier le projet de Steve (403), ne peut pas quitter son propre groupe.
 **Pas testé sur un vrai serveur Paper.**
+
+### 16 novembre 2026 : version 1.6.1, un graphique dans la fiche d'un bloc
+
+**Demande (avec une capture du « Béton blanc ») :** « mettre une charte de ce qui est posé et ce qui n'est pas posé,
+parce que là on a que des nombres, c'est pas trop visuel ».
+
+**Fait :** dans `itemSheet`, les tuiles sont remplacées par un bloc `.ish-chart` : `ring2` (même anneau que le projet,
+nouvelle option `text` pour le centre = % posé, ou % réuni si le projet n'est pas placé) et une légende `.ish-part`
+(couleur, nom, nombre, %, détail). Les pourcentages sont arrondis par « plus grands restes » pour faire 100 %, sans
+jamais arrondir à 100 % une part incomplète ; une part non nulle sous 1 % affiche « < 1 % ».
+
+**Vérifié :** site de démo PC et téléphone (bûche de chêne : 37 % posé + 63 % coffres ; dalle en sapin : 0 % posé,
+34 % joueurs, 66 % manque). 24 tests passent. **Pas testé sur un vrai serveur.**
 
 ### 16 novembre 2026 : version 1.6.0, la fiche d'un bloc dans son projet
 

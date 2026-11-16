@@ -238,22 +238,48 @@ function itemSheet(p, l) {
     const section = (title, content) => h('div.ish-sec', h('h3', title), content);
 
     api(`project/${p.id}/item/${l.id}`).then((d) => {
-      const got = d.placed + d.useful + d.inv;
-      const pct = d.need ? Math.floor((got / d.need) * 100) : 100;
       const extraChests = d.have - d.useful;
       const extraCarried = d.carried - d.inv;
       const avail = Math.min(d.missing, d.elsewhere);
+      const toPlace = Math.max(0, d.need - d.placed);
+      // Shares of the plan rounded so that they always add up to 100 % (largest remainders).
+      const shares = (() => {
+        const vals = { pl: d.inWorld ? d.placed : 0, ch: d.useful, iv: d.inv, mi: d.missing };
+        const keys = Object.keys(vals);
+        const raw = keys.map((k) => (d.need ? (vals[k] / d.need) * 100 : 0));
+        const out = raw.map(Math.floor);
+        let left = d.need ? 100 - out.reduce((a, b) => a + b, 0) : 0;
+        keys.map((k, i) => i).sort((a, b) => (raw[b] - out[b]) - (raw[a] - out[a]))
+          // Never round up to 100 % something that is not complete.
+          .forEach((i) => { if (left > 0 && raw[i] > out[i] && out[i] + 1 < 100) { out[i]++; left--; } });
+        return Object.fromEntries(keys.map((k, i) => [k, out[i]]));
+      })();
+      // One line of the legend: colour, what it is, how many, share of the plan, and a detail under it.
+      const part = (cls, label, n, detail) => h('div.ish-part',
+        h('i', { class: cls }),
+        h('div.main-col', h('div.lbl', label), detail ? h('div.d', detail) : null),
+        h('div.n', fmt(n)),
+        h('div.p', n > 0 && shares[cls || 'mi'] === 0 ? '< 1 %' : `${shares[cls || 'mi']} %`));
+      const done = d.missing === 0;
       body.replaceChildren(...[
         h('div.ish-head', h('div.ic-box', itemIcon(d.id)),
           h('div.main-col', h('div.note', `Dans le projet « ${d.project} »`),
-            progressBar(d.useful, d.need, d.placed, d.inv)),
-          h('div.ish-pct', d.missing ? `${pct} %` : h('span.ok-pill', icon('check'), d.placed >= d.need ? 'Posé' : 'OK'))),
-        h('div.tiles.six',
-          tile('Il faut', fmt(d.need), stacks(d.need, d.st)),
-          d.inWorld ? tile('Déjà posés', fmt(d.placed), `${d.need ? Math.floor((d.placed / d.need) * 100) : 0} % du plan`, 'placed') : null,
-          tile('Dans les coffres liés', fmt(d.have), extraChests > 0 ? `dont ${fmt(extraChests)} en trop` : stacks(d.have, d.st)),
-          tile('Sur les joueurs', fmt(d.carried), extraCarried > 0 ? `dont ${fmt(extraCarried)} en trop` : stacks(d.carried, d.st), 'inv'),
-          tile('Manque', fmt(d.missing), d.missing ? stacks(d.missing, d.st) || (avail ? `${fmt(avail)} ailleurs` : null) : 'rien !', d.missing ? '' : 'good')),
+            h('div.ish-need', h('b', fmt(d.need)), ` à poser en tout${stacks(d.need, d.st) ? ` · ${stacks(d.need, d.st)}` : ''}`)),
+          done ? h('span.ok-pill', icon('check'), d.placed >= d.need ? 'Posé' : 'OK') : null),
+        h('div.ish-chart',
+          ring2(d.need ? d.placed / d.need : 0, d.need ? d.useful / d.need : 0, {
+            size: 132, stroke: 12, inv: d.need ? d.inv / d.need : 0,
+            text: d.inWorld ? `${shares.pl} %` : `${shares.pl + shares.ch + shares.iv} %`,
+            label: d.inWorld ? 'posé' : 'réunis',
+          }),
+          h('div.ish-parts',
+            d.inWorld ? part('pl', 'Déjà posés', d.placed, d.placed >= d.need ? 'tout est posé !' : `${fmt(toPlace)} pas encore posés`) : null,
+            part('ch', 'Dans les coffres liés', d.useful,
+              extraChests > 0 ? `${fmt(d.have)} rangés, dont ${fmt(extraChests)} en trop` : stacks(d.useful, d.st)),
+            part('iv', 'Sur les joueurs', d.inv,
+              extraCarried > 0 ? `${fmt(d.carried)} portés, dont ${fmt(extraCarried)} en trop` : stacks(d.inv, d.st)),
+            part('', 'Manque', d.missing,
+              done ? 'rien !' : [stacks(d.missing, d.st), avail ? `${fmt(avail)} ailleurs` : null].filter(Boolean).join(' · ') || null))),
         section('Sur les joueurs en ligne', d.who.length
           ? h('div.list', d.who.map((w) => h('div.row.plain',
             avatar(w.name),

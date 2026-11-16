@@ -1,5 +1,13 @@
 # Changements
 
+## 1.6.1 — Un graphique dans la fiche d'un bloc
+
+- La fiche d'un bloc dans un projet montre un **anneau** : vert = déjà posé, bleu = dans les coffres liés, orange =
+  sur les joueurs, gris = ce qui manque. Au centre, le pourcentage déjà **posé** (ou « réunis » si le projet n'est
+  pas placé dans le monde).
+- À côté, la légende avec le nombre et le pourcentage de chaque part (ils font toujours 100 % au total), et le détail :
+  combien ne sont pas encore posés, combien sont en trop dans les coffres ou sur les joueurs, les stacks qui manquent.
+
 ## 1.6.0 — Chaque bloc dans son projet
 
 - Sur la page d'un projet, **cliquer sur un bloc** ouvre sa fiche **dans ce projet** (avant, on arrivait sur la page

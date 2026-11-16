@@ -90,7 +90,8 @@ Tu prépares un château, une ferme, une base ? Envoie son plan sur le site et C
    puis un clic droit sur les coffres). Leur contenu est compté en direct, shulkers comprises.
 5. Tu vois le **pourcentage réuni**, bloc par bloc ce qu'il **manque** (« 520 · 8 stacks + 8 ») et ce qui traîne
    **ailleurs** dans d'autres coffres. Un bouton copie la liste des manquants pour la coller sur Discord.
-   **Clique sur un bloc** de la liste pour le voir dans ce projet : combien sont posés, dans quels coffres liés il est,
+   **Clique sur un bloc** de la liste pour le voir dans ce projet : un anneau montre ce qui est posé, dans les coffres,
+   sur les joueurs et ce qui manque. La fiche dit aussi dans quels coffres liés il est,
    **qui le porte** sur lui, et quels autres coffres (pas liés) en ont, avec un bouton pour les faire briller en jeu.
 6. **Place le projet dans le monde** (carte « Dans le monde ») : Coffres compte aussi les **blocs déjà posés**.
 
@@ -172,7 +173,7 @@ Pour essayer : [`docs/exemples/`](docs/exemples/) contient une petite maison en 
 
 **Prérequis :** un serveur **Paper 26.2** (ou plus récent) qui tourne avec **Java 25**.
 
-1. Télécharge `Coffres-1.6.0.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
+1. Télécharge `Coffres-1.6.1.jar` (dans le dossier [`release/`](release/) ou dans l'onglet **Releases**).
 2. Mets-le dans le dossier `plugins/` du serveur et démarre le serveur.
 3. **Ouvre le port du site (8125 par défaut).** C'est un port en plus de celui de Minecraft :
    - serveur chez toi : redirige le port **TCP 8125** de ta box vers la machine du serveur ;

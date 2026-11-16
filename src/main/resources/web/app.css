@@ -605,7 +605,20 @@ select.input { appearance: none; -webkit-appearance: none; cursor: pointer; }
 .item-sheet .ish-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .item-sheet .ish-head .main-col { flex: 1; min-width: 0; }
 .item-sheet .ish-head .note { margin-bottom: 6px; }
-.item-sheet .ish-pct { font-weight: 700; font-size: 20px; flex: none; }
+.item-sheet .ish-need { font-size: 14px; color: var(--text-2); }
+.item-sheet .ish-need b { color: var(--text); font-size: 17px; font-variant-numeric: tabular-nums; }
+.item-sheet .ish-chart { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 22px;
+  background: var(--surface-2); border-radius: 16px; padding: 16px; }
+.item-sheet .ish-parts { flex: 1 1 250px; min-width: 0; display: grid; gap: 10px; }
+.item-sheet .ish-part { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 44px; gap: 10px; align-items: center; }
+.item-sheet .ish-part > i { width: 12px; height: 12px; border-radius: 3px; background: var(--fill-2); align-self: start; margin-top: 4px; }
+.item-sheet .ish-part > i.pl { background: var(--good); }
+.item-sheet .ish-part > i.ch { background: var(--accent); }
+.item-sheet .ish-part > i.iv { background: var(--warn); }
+.item-sheet .ish-part .lbl { font-weight: 600; font-size: 14.5px; }
+.item-sheet .ish-part .d { font-size: 12.5px; color: var(--text-2); }
+.item-sheet .ish-part .n { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.item-sheet .ish-part .p { font-size: 13px; color: var(--text-2); text-align: right; font-variant-numeric: tabular-nums; }
 .item-sheet .ish-sec { margin-top: 16px; }
 .item-sheet .ish-sec h3 { font-size: 15px; font-weight: 650; margin: 0 0 6px; }
 .item-sheet .list { background: var(--surface-2); border-radius: 14px; overflow: hidden; }

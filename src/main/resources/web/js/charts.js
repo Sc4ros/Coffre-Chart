@@ -310,14 +310,14 @@ export function ring(ratio, { size = 120, stroke = 12, label, color } = {}) {
  * Ring with up to three parts: what is already placed in the world (green), what is in the chests (blue)
  * and what the players near the build carry (orange). The number in the middle is the total.
  */
-export function ring2(placed, chests, { size = 120, stroke = 12, label, inv = 0 } = {}) {
+export function ring2(placed, chests, { size = 120, stroke = 12, label, inv = 0, text } = {}) {
   const r = (100 - stroke) / 2;
   const c = 2 * Math.PI * r;
   const a = Math.max(0, Math.min(1, placed || 0));
   const b = Math.max(0, Math.min(1 - a, chests || 0));
   const d = Math.max(0, Math.min(1 - a - b, inv || 0));
   const total = a + b + d;
-  const pctText = Math.floor(total * 100 + 1e-9) + ' %';
+  const pctText = text || Math.floor(total * 100 + 1e-9) + ' %';
   const arc = (from, len, col) => (len > 0 ? s('circle', {
     cx: 50, cy: 50, r, transform: `rotate(${-90 + from * 360} 50 50)`,
     style: `fill:none;stroke:${col};stroke-width:${stroke};stroke-dasharray:${(c * len).toFixed(2)} ${c.toFixed(2)}`,
