@@ -1,5 +1,18 @@
 # Changements
 
+## 1.6.0 — Chaque bloc dans son projet
+
+- Sur la page d'un projet, **cliquer sur un bloc** ouvre sa fiche **dans ce projet** (avant, on arrivait sur la page
+  générale de l'objet) :
+  - il faut / déjà posés / dans les coffres liés / sur les joueurs / manque, avec les stacks et ce qui est en trop ;
+  - **qui le porte** : les membres en ligne qui en ont sur eux, et combien ;
+  - les **coffres liés** qui en contiennent (avec ce qui est rangé en shulker) ;
+  - les **autres coffres** (pas liés au projet) qui en ont, pour savoir où aller le chercher ;
+  - un bouton pour faire briller chaque coffre en jeu, et un lien « Voir partout sur le serveur ».
+- Cartes des projets : posé, coffres et joueurs avec leurs couleurs, sur deux lignes au lieu d'un texte coupé sur
+  téléphone ; le nom du fichier se coupe sans cacher la date.
+- Une fenêtre ouverte (fiche d'un bloc, groupes…) se ferme quand on change de page ou qu'on fait « retour ».
+
 ## 1.5.1 — Inventaires partout
 
 - Correctif : les blocs que portent les membres d'un projet n'étaient comptés que si le projet était **placé dans le

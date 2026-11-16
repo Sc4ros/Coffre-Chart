@@ -11,7 +11,7 @@ Le mode d'emploi pour les joueurs et les admins est dans [`README.md`](README.md
 
 ## Où en est le projet
 
-- **Version actuelle : 1.5.1** (`release/Coffres-1.5.1.jar`).
+- **Version actuelle : 1.6.0** (`release/Coffres-1.6.0.jar`).
 - Compile, et les **24 tests** passent (BuildTest 6, CoreTest 6, GroupTest 3, ProjectTest 7, VisibilityTest 2).
 - Le **site** a été testé dans un navigateur avec les données de démonstration (`./gradlew runDev`), sur téléphone et PC.
 - **Pas encore testé sur un vrai serveur Minecraft** : tout ce qui se passe en jeu (voir « Pas encore fait » en bas).
@@ -348,6 +348,27 @@ groupe, retour en commun) ; 23 tests passent. Sur le site de démo : créer un g
 « Bob » jamais venu, passer la petite maison en groupe ; connecté en Alex (non admin) : il voit les projets de ses
 groupes, peut lier (`canLink`), ne peut pas modifier le projet de Steve (403), ne peut pas quitter son propre groupe.
 **Pas testé sur un vrai serveur Paper.**
+
+### 16 novembre 2026 : version 1.6.0, la fiche d'un bloc dans son projet
+
+**Demande :** dans un projet, cliquer sur un bloc menait à la page générale de l'objet ; on ne savait pas qui avait ce
+bloc dans son inventaire, ni combien étaient posés. « Ça devrait mettre le bloc dans ce projet-là. » Puis :
+« Améliore le site si tu peux aussi. »
+
+**Fait :**
+- `Build.Carrier` garde maintenant le détail par objet (`what`), rempli par `BuildScanner.inventories()`.
+- `Api.projectItem(session, projet, objet)` + route `GET /api/project/{id}/item/{objet}` : chiffres de la ligne,
+  coffres liés visibles qui en ont (`chests`), 10 autres coffres visibles non liés (`others`, `othersCount`), joueurs
+  qui le portent (`who`). Mêmes règles de visibilité que le reste (coffres privés des autres jamais montrés).
+- Site : `itemSheet(p, l)` dans `projects.js` ; les lignes de blocs sont des boutons qui l'ouvrent (lien « Voir partout
+  sur le serveur » vers l'ancienne page).
+- Améliorations : `sheet()` (util.js) se ferme au changement de page (`hashchange`), sinon la fenêtre restait par-dessus
+  la nouvelle page ; cartes de projet avec pastilles de couleur (posé / coffres / joueurs) qui passent à la ligne, et
+  pied de carte où seul le nom du fichier est coupé.
+
+**Vérifié :** `GroupTest` complété (qui porte quoi, bloc hors projet → 404) ; 24 tests passent. Site de démo, PC et
+téléphone : dalles en sapin (Steve 40), bûche de chêne (coffre lié « Bois » + coffre « Shulkers » non lié), « null »
+parasite corrigé, retour arrière qui ferme la fenêtre. **Pas testé sur un vrai serveur.**
 
 ### 16 novembre 2026 : version 1.5.1, les inventaires comptent partout
 
